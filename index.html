@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+
+    <meta name="description" content="Motion physics simulation and plotter">
+
+    <title>Motus</title>
+
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=cleaning_services,fiber_manual_record,stop_circle" />
+</head>
+
+<body>
+    <div class="page-layout" tabindex="-1" id="main-container">
+        <aside class="panel">
+            <div class="plots-container">
+                <h2>
+                    <b>Motus</b>
+                </h2>
+                <p>
+                    <b>SHOW TRACE</b>
+                    <span style="margin-left: 10px;"></span>
+                    <label class="switch">
+                        <input type="checkbox" id="show-trace">
+                        <span class="slider round"></span>
+                    </label>
+                </p>
+                <div class="centered">
+                    <button id="record-button" class="big-button" style="margin-bottom: 10px;">
+                        <span class="material-symbols-outlined" id="record-icon">
+                            fiber_manual_record
+                        </span>
+                        <span id="record-text">RECORD</span>
+                    </button>
+                    <button id="clear-button" class="big-button" style="background-color: #e63946;"> <!-- Different color for clear? Or keep accent? Stick to consistent style for now, maybe just accent -->
+                        <span class="material-symbols-outlined">
+                            cleaning_services
+                        </span>
+                        <span>CLEAR</span>
+                    </button>
+                </div>
+                <p>Position - Time</p>
+                <canvas id="plot-canvas" class="plot-canvas"></canvas>
+            </div>
+        </aside>
+        <div class="space-canvas-container">
+            <canvas id="space-canvas"></canvas>
+        </div>
+    </div>
+    <script src="js/script.js"></script>
+</body>
+</html>

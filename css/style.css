@@ -1,0 +1,193 @@
+/* || Imports */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
+/* || Variables */
+
+:root {
+    /* || Colors -- */
+    --color-background-page: #ffffff;
+    --color-background-primary: #efefef;
+    --color-text-primary: #000000;
+    --color-accent: #1484e6;
+    --color-border-primary: #c3c7cb;
+    /* || Dimension */
+
+}
+
+/* || General styles */
+
+::selection {
+    color: var(--color-background-page);
+    background-color: var(--color-accent);
+}
+
+html {
+    background-color: var(--color-background-page);
+    color: var(--color-text-primary);
+}
+
+body {
+    margin: 0;
+}
+
+.page-layout {
+    display: flex;
+    flex-direction: column-reverse;
+}
+
+.panel {
+    background-color: var(--color-background-page);
+    border-top: 1px var(--color-border-primary) solid;
+    border-right: 0px;
+    overflow: visible;
+}
+
+.space-canvas-container {
+    width: 100%;
+    height: calc(100vh - 300px);
+    position: relative; /* For text overlay if needed */
+}
+
+#space-canvas {
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+    touch-action: none;
+}
+
+#space-canvas:active {
+    cursor: grabbing;
+}
+
+.plots-container {
+    padding: 20px;
+}
+
+canvas.plot-canvas {
+    width: 100%;
+    height: 250px; /* Made it slightly bigger as it's the only plot */
+    background-color: var(--color-background-page);
+    border-radius: 0px;
+}
+
+@media (min-width: 768px) and (orientation: landscape) {
+    .page-layout {
+        flex-direction: row;
+    }
+
+    .panel {
+        width: 400px; /* Slightly narrower than inertia */
+        height: 100vh;
+        border-top: 0px;
+        border-right: 1px var(--color-border-primary) solid;
+        overflow: auto;
+    }
+
+    .space-canvas-container {
+        height: 100vh;
+        flex-grow: 1;
+    }
+}
+
+.centered {
+    padding: 20px;
+    display: grid;
+    place-items: center;
+}
+
+/* || Button */
+
+button.big-button {
+    width: 95%;
+    height: 40px;
+    border: none;
+    border-radius: 5px;
+    color: var(--color-background-page);
+    background-color: var(--color-accent);
+    font-weight: bold;
+    cursor: pointer;
+    transition: .1s;
+}
+
+button.big-button:hover {
+    background-color: #2079c7;
+}
+
+/* || Toggle switch */
+
+/* The switch - the box around the slider */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 24px;
+}
+
+/* Hide default HTML checkbox */
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+/* The slider */
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    box-shadow: 0 0 0 2px var(--color-border-primary);
+    background-color: var(--color-background-page);
+    -webkit-transition: .1s;
+    transition: .1s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 4px;
+    bottom: 4px;
+    background-color: var(--color-border-primary);
+    -webkit-transition: .1s;
+    transition: .1s;
+}
+
+input:checked+.slider {
+    box-shadow: none;
+    background-color: var(--color-accent);
+}
+
+input:focus+.slider {
+    box-shadow:
+        0 0 0 3px var(--color-background-page),
+        0 0 0 6px var(--color-text-primary);
+}
+
+input:checked+.slider:before {
+    background-color: var(--color-background-page);
+    -webkit-transform: translateX(16px);
+    -ms-transform: translateX(16px);
+    transform: translateX(16px);
+}
+
+/* Rounded sliders */
+.slider.round {
+    border-radius: 24px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+/* || Typography */
+
+* {
+    font-family: "Space Mono", monospace;
+}
