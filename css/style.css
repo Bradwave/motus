@@ -133,6 +133,8 @@ html, body {
     background-color: var(--color-bg-track);
     border-bottom: 1px solid var(--color-border);
     box-shadow: inset 0 0 20px rgba(0,0,0,0.02);
+    min-width: 0;
+    min-height: 0;
 }
 
 @media screen and (orientation: landscape) {
@@ -156,6 +158,8 @@ html, body {
     position: relative;
     background-color: var(--color-bg);
     display: flex;
+    min-width: 0;
+    min-height: 0;
 }
 
 @media screen and (orientation: landscape) {
@@ -171,6 +175,7 @@ html, body {
     cursor: crosshair;
 }
 
+/* || Playback Controls */
 /* || Playback Controls */
 .playback-controls {
     position: absolute;
@@ -218,7 +223,10 @@ html, body {
     box-shadow: 0 2px 5px rgba(20, 132, 230, 0.3);
 }
 .icon-button-large:hover {
-    background: var(--color-accent-hover);
+    background: var(--color-accent-dark);
+}
+.icon-button-large:active {
+    transform: scale(0.95);
 }
 .icon-button-large .material-icons {
     font-size: 20px;
@@ -234,6 +242,8 @@ html, body {
     flex-direction: column;
     z-index: 5;
     max-height: 40vh; /* Limit height in portrait so track/plot remain visible */
+    min-width: 0; 
+    /* No min-height: 0 here necessarily, as it's min-content or auto sized, but safe to have */
 }
 
 @media screen and (orientation: landscape) {
@@ -308,6 +318,64 @@ html, body {
 input:checked + .slider { background-color: var(--color-accent); }
 input:checked + .slider:before { transform: translateX(20px); }
 
+/* Range Slider */
+input[type=range] {
+    -webkit-appearance: none; 
+    width: 100%; 
+    background: transparent; 
+    height: 24px;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+}
+input[type=range]:focus { outline: none; }
+
+/* Track */
+input[type=range]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 4px;
+    background: #e0e0e0;
+    border-radius: 2px;
+    border: none;
+}
+input[type=range]::-moz-range-track {
+    width: 100%;
+    height: 4px;
+    background: #e0e0e0;
+    border-radius: 2px;
+    border: none;
+}
+
+/* Thumb */
+input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    height: 16px;
+    width: 16px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    margin-top: -6px; /* align center with 4px track: (4 - 16) / 2 */
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    transition: transform 0.1s;
+}
+input[type=range]::-moz-range-thumb {
+    height: 16px;
+    width: 16px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    border: none;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    transition: transform 0.1s;
+}
+
+input[type=range]:active::-webkit-slider-thumb {
+    transform: scale(1.2);
+    background: var(--color-accent-dark);
+}
+input[type=range]:active::-moz-range-thumb {
+    transform: scale(1.2);
+    background: var(--color-accent-dark);
+}
+
 /* Buttons */
 button {
     cursor: pointer;
@@ -322,6 +390,9 @@ button {
     color: var(--color-text-main);
     padding: 8px;
     border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 .icon-button:hover { background-color: rgba(0,0,0,0.05); }
 
@@ -397,17 +468,9 @@ button {
 }
 @media screen and (orientation: portrait) {
     .fab-button {
-        bottom: 24px;
-        left: 24px; /* Move to left in portrait? Prompt said "Right" before, but usually FABs are right. */
-        right: auto;
-    }
-    /* Wait, prompt didn't specify position in portrait, but let's keep it safe. 
-       Usually right is better for thumb. 
-    */
-    .fab-button {
-        bottom: 24px;
+        bottom: 24px; /* Default */
         left: auto;
-        right: 24px;
+        right: 24px; /* Ensure right alignment as per typical FAB */
     }
 }
 

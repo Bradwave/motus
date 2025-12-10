@@ -3,22 +3,69 @@ const spaceCanvas = document.getElementById('space-canvas');
 const spaceCtx = spaceCanvas.getContext('2d');
 const plotCanvas = document.getElementById('plot-canvas');
 const plotCtx = plotCanvas.getContext('2d');
+const velocityCanvas = document.getElementById('velocity-canvas');
+const velocityCtx = velocityCanvas.getContext('2d');
+const velocityContainer = document.getElementById('velocity-container');
 
 const recordBtn = document.getElementById('record-button');
 const recordIcon = document.getElementById('record-icon');
 const clearBtn = document.getElementById('clear-button');
 const showTraceCheckbox = document.getElementById('show-trace');
-const showGridCheckbox = document.getElementById('show-grid'); // New
+const showVelocityCheckbox = document.getElementById('show-velocity'); // New
+const showGridCheckbox = document.getElementById('show-grid');
 const fullscreenBtn = document.getElementById('fullscreen-button');
 const fullscreenIcon = document.getElementById('fullscreen-icon');
 const rotateHint = document.getElementById('rotate-hint');
 const dismissRotateHintBtn = document.getElementById('dismiss-rotate-hint');
+const deleteRecBtn = document.getElementById('delete-recording-button'); // New
+const smoothingSlider = document.getElementById('smoothing-slider'); // New
+const smoothingValue = document.getElementById('smoothing-value'); // New
+let rawRecordings = []; // New
 
+
+// Playback UI
 // Playback UI
 const playbackOverlay = document.getElementById('playback-overlay');
 const playPauseBtn = document.getElementById('play-pause-button');
 const playIcon = document.getElementById('play-icon');
 const playbackTimeLabel = document.getElementById('playback-time');
+
+function togglePlaybackUI(show) {
+    if (show) {
+        playbackOverlay.classList.remove('hidden');
+        isPlaying = false;
+        playIcon.innerText = 'play_arrow';
+        playbackTime = 0;
+        playbackTimeLabel.innerText = '0.0s';
+        
+        // Ensure velocity plot resizes correctly if shown
+        if (showVelocityCheckbox.checked) resize();
+    } else {
+        playbackOverlay.classList.add('hidden');
+        isPlaying = false;
+        playIcon.innerText = 'play_arrow';
+    }
+}
+
+playPauseBtn.addEventListener('click', () => {
+    if (selectedRecIndex === -1) return;
+    
+    if (isPlaying) {
+        isPlaying = false;
+        playIcon.innerText = 'play_arrow';
+    } else {
+        // ... Check end
+        const rec = recordings[selectedRecIndex];
+        const maxT = rec[rec.length-1].t;
+        if (playbackTime >= maxT) {
+            playbackTime = 0;
+        }
+        
+        isPlaying = true;
+        playIcon.innerText = 'pause';
+        lastFrameTime = Date.now();
+    }
+});
 
 // Config
 const TRACE_INTERVAL_MS = 50; 
@@ -66,16 +113,186 @@ function resize() {
     
     isVertical = rect.height > rect.width;
 
+// ... Inside resize function
     // Plot
     const rectP = plotCanvas.parentElement.getBoundingClientRect();
     plotCanvas.width = rectP.width * dpr;
     plotCanvas.height = rectP.height * dpr;
     plotCtx.resetTransform();
     plotCtx.scale(dpr, dpr);
+    
+    // Velocity
+    if (showVelocityCheckbox.checked) {
+        velocityContainer.style.display = 'block';
+        const rectV = velocityCanvas.parentElement.getBoundingClientRect();
+        velocityCanvas.width = rectV.width * dpr;
+        velocityCanvas.height = rectV.height * dpr;
+        velocityCtx.resetTransform();
+        velocityCtx.scale(dpr, dpr);
+    } else {
+        velocityContainer.style.display = 'none';
+    }
 }
 
-window.addEventListener('resize', resize);
-setTimeout(resize, 100);
+showVelocityCheckbox.addEventListener('change', () => {
+    resize();
+});
+
+// ... (Listeners)
+
+// ... (Loop)
+function loop() {
+    const now = Date.now();
+    const dt = (now - lastFrameTime) / 1000;
+    lastFrameTime = now;
+    
+    update(dt);
+    drawSpace();
+    drawPlot();
+    if (showVelocityCheckbox.checked) drawVelocity();
+    requestAnimationFrame(loop);
+}
+
+// ... (Update, DrawSpace, DrawPlot)
+
+function drawVelocity() {
+    const w = velocityCanvas.width / window.devicePixelRatio;
+    const h = velocityCanvas.height / window.devicePixelRatio;
+    
+    velocityCtx.clearRect(0, 0, w, h);
+    
+    const padL = 40, padR = 20, padT = 20, padB = 25;
+    const plotW = w - padL - padR;
+    const plotH = h - padT - padB;
+    
+    let maxTime = 5;
+    let maxV = 2; // Default range +/- 2
+    
+    const allRecs = [...recordings];
+    if (isRecording) allRecs.push(currentRec);
+    
+    allRecs.forEach(rec => {
+        if (rec.length > 0 && rec[rec.length-1].t > maxTime)
+            maxTime = rec[rec.length-1].t;
+        
+        // Find max velocity roughly to scale Y axis?
+        // Let's iterate points
+        for(let i=1; i<rec.length; i++) {
+            const v = (rec[i].x - rec[i-1].x) / (rec[i].t - rec[i-1].t || 0.001);
+            if (Math.abs(v) > maxV) maxV = Math.abs(v);
+        }
+    });
+
+    // Clamp maxV to reasonable limits to avoid flat lines or infinite zoom
+    if (maxV < 1) maxV = 1;
+    if (maxV > 20) maxV = 20; // Cap visual range
+    
+    // Axis Lines & Grid
+    // Y Axis (Velocity) - Symmetric around 0
+    velocityCtx.beginPath();
+    velocityCtx.strokeStyle = '#aaa';
+    velocityCtx.lineWidth = 2;
+    velocityCtx.moveTo(padL, padT);
+    velocityCtx.lineTo(padL, h - padB); // Y axis
+    
+    // Zero line
+    const zeroY = padT + plotH / 2;
+    velocityCtx.moveTo(padL, zeroY);
+    velocityCtx.lineTo(w - padR, zeroY);
+    
+    velocityCtx.stroke();
+    
+    // Labels for Y
+    velocityCtx.fillStyle = COL_GRID_TEXT;
+    velocityCtx.font = '10px Space Mono';
+    velocityCtx.textAlign = 'right';
+    velocityCtx.textBaseline = 'middle';
+    velocityCtx.fillText('0', padL - 6, zeroY);
+    velocityCtx.fillText(maxV.toFixed(1), padL - 6, padT);
+    velocityCtx.fillText((-maxV).toFixed(1), padL - 6, h - padB);
+
+    // X Axis same as plot
+    let tStep = 1;
+    if (maxTime > 10) tStep = 2;
+    if (maxTime > 30) tStep = 5;
+    
+    for (let t = 0; t <= Math.ceil(maxTime); t += tStep) {
+        if (t > maxTime) break;
+        const xx = padL + (t / maxTime) * plotW;
+        
+        velocityCtx.beginPath();
+        velocityCtx.strokeStyle = COL_GRID;
+        velocityCtx.lineWidth = 1;
+
+        if (showGridCheckbox.checked) {
+             velocityCtx.moveTo(xx, padT);
+             velocityCtx.lineTo(xx, h - padB);
+        } else {
+             velocityCtx.moveTo(xx, h - padB);
+             velocityCtx.lineTo(xx, h - padB - 5);
+        }
+        velocityCtx.stroke();
+        
+        velocityCtx.fillStyle = COL_GRID_TEXT;
+        velocityCtx.textAlign = 'center';
+        velocityCtx.textBaseline = 'top';
+        velocityCtx.fillText(t + 's', xx, h - padB + 5);
+    }
+    
+    // Draw V-Curves
+    allRecs.forEach((rec, idx) => {
+        if (rec.length < 2) return;
+        const isSel = (idx === selectedRecIndex);
+        const color = isSel ? COL_ACCENT : 'rgba(20, 132, 230, 0.3)';
+        const lw = isSel ? 2 : 1;
+        
+        velocityCtx.strokeStyle = color;
+        velocityCtx.lineWidth = lw;
+        velocityCtx.beginPath();
+        
+        // We'll compute v at each point i as (x[i] - x[i-1]) / dt
+        // For i=0, v=0 or forward diff
+        
+        const getPt = (i) => {
+            const v = (rec[i].x - rec[i-1].x) / (rec[i].t - rec[i-1].t);
+            // Map v to Y:  range [-maxV, maxV] -> [h - padB, padT]
+            // norm = (v - (-maxV)) / (2*maxV) = (v + maxV) / (2*maxV)
+            // y = (h - padB) - norm * plotH
+            
+            const norm = (v + maxV) / (2 * maxV);
+            return {
+                x: padL + (rec[i].t / maxTime) * plotW,
+                y: (h - padB) - norm * plotH
+            };
+        };
+        
+        // Start from i=1 for backward diff
+        const start = getPt(1);
+        if(!start) return; // safety
+        
+        velocityCtx.moveTo(start.x, start.y);
+        for(let i=2; i<rec.length; i++) {
+            const pt = getPt(i);
+            velocityCtx.lineTo(pt.x, pt.y);
+        }
+        velocityCtx.stroke();
+    });
+    
+    // Playback marker on velocity
+    if ((isPlaying || selectedRecIndex !== -1) && playbackTime > 0) {
+        const xT = Math.round(padL + (playbackTime / maxTime) * plotW) + 0.5;
+        if (xT <= w - padR) {
+            velocityCtx.strokeStyle = COL_ACCENT_DARK;
+            velocityCtx.lineWidth = 1;
+            velocityCtx.setLineDash([4, 4]);
+            velocityCtx.beginPath();
+            velocityCtx.moveTo(xT, padT);
+            velocityCtx.lineTo(xT, h - padB);
+            velocityCtx.stroke();
+            velocityCtx.setLineDash([]);
+        }
+    }
+}
 
 // Rotate Hint
 if (window.matchMedia("(max-width: 600px) and (orientation: portrait)").matches) {
@@ -175,7 +392,14 @@ function stopRecording() {
     if (!isRecording) return;
     isRecording = false;
     if (currentRec.length > 1) {
-        recordings.push(currentRec);
+        // Save to raw
+        rawRecordings.push(currentRec);
+        
+        // Apply current smoothing
+        const smVal = parseInt(smoothingSlider.value, 10);
+        const smoothed = smoothRecording(currentRec, smVal);
+        recordings.push(smoothed);
+        
         selectedRecIndex = recordings.length - 1;
         togglePlaybackUI(true);
     }
@@ -184,6 +408,68 @@ function stopRecording() {
     recordBtn.classList.remove('recording');
     recordIcon.innerText = 'fiber_manual_record';
 }
+
+function smoothRecording(rec, windowSize) {
+    if (windowSize <= 1 || rec.length < windowSize) return [...rec]; 
+    
+    // Simple Moving Average
+    const smoothed = [];
+    for (let i = 0; i < rec.length; i++) {
+        let sum = 0;
+        let count = 0;
+        // Centered window preferable, or trailing? slider usually implies trailing in real-time but this is post-process. Centered is better for phase.
+        // Let's do centered: [i - w/2, i + w/2]
+        const half = Math.floor(windowSize / 2);
+        const start = Math.max(0, i - half);
+        const end = Math.min(rec.length - 1, i + half);
+        
+        for (let j = start; j <= end; j++) {
+            sum += rec[j].x;
+            count++;
+        }
+        
+        smoothed.push({
+            t: rec[i].t,
+            x: sum / count
+        });
+    }
+    return smoothed;
+}
+
+// Slider Logic (Non-retroactive, local to current/selected)
+smoothingSlider.addEventListener('input', () => {
+    const val = parseInt(smoothingSlider.value, 10);
+    smoothingValue.innerText = val;
+    
+    // Only update the currently selected recording
+    if (selectedRecIndex !== -1 && rawRecordings[selectedRecIndex]) {
+        const smoothed = smoothRecording(rawRecordings[selectedRecIndex], val);
+        recordings[selectedRecIndex] = smoothed;
+        
+        requestAnimationFrame(() => {
+            drawSpace();
+            drawPlot();
+            if (showVelocityCheckbox.checked) drawVelocity();
+        });
+    }
+});
+
+// Delete Logic
+deleteRecBtn.addEventListener('click', () => {
+    if (selectedRecIndex !== -1) {
+        recordings.splice(selectedRecIndex, 1);
+        rawRecordings.splice(selectedRecIndex, 1);
+        
+        selectedRecIndex = -1;
+        togglePlaybackUI(false);
+        
+        requestAnimationFrame(() => {
+            drawSpace();
+            drawPlot();
+            if (showVelocityCheckbox.checked) drawVelocity();
+        });
+    }
+});
 
 recordBtn.addEventListener('pointerdown', (e) => {
     startRecording();
@@ -200,39 +486,6 @@ document.addEventListener('keyup', (e) => {
     if (e.key === 'r' || e.key === 'R') stopRecording();
 });
 
-// Playback Logic
-function togglePlaybackUI(show) {
-    if (show) {
-        playbackOverlay.classList.remove('hidden');
-        isPlaying = false;
-        playIcon.innerText = 'play_arrow';
-        playbackTime = 0;
-        playbackTimeLabel.innerText = '0.0s';
-    } else {
-        playbackOverlay.classList.add('hidden');
-        isPlaying = false;
-        playIcon.innerText = 'play_arrow';
-    }
-}
-
-playPauseBtn.addEventListener('click', () => {
-    if (selectedRecIndex === -1) return;
-    
-    if (isPlaying) {
-        isPlaying = false;
-        playIcon.innerText = 'play_arrow';
-    } else {
-        const rec = recordings[selectedRecIndex];
-        const maxT = rec[rec.length-1].t;
-        if (playbackTime >= maxT) {
-            playbackTime = 0;
-        }
-        
-        isPlaying = true;
-        playIcon.innerText = 'pause';
-        lastFrameTime = Date.now();
-    }
-});
 
 // Plot Interaction
 plotCanvas.addEventListener('click', (e) => {
@@ -250,7 +503,7 @@ plotCanvas.addEventListener('click', (e) => {
     
     let maxTime = 5;
     recordings.forEach(rec => {
-        if (rec[rec.length-1].t > maxTime) maxTime = rec[rec.length-1].t;
+        if (rec.length > 0 && rec[rec.length-1].t > maxTime) maxTime = rec[rec.length-1].t;
     });
     
     const tClick = ((x - padL) / plotW) * maxTime;
@@ -567,9 +820,9 @@ function drawPlot() {
     }
     
     if ((isPlaying || selectedRecIndex !== -1) && playbackTime > 0) {
-        const xT = padL + (playbackTime / maxTime) * plotW;
+        const xT = Math.round(padL + (playbackTime / maxTime) * plotW) + 0.5; // Snap to pixel
         if (xT <= w - padR) {
-            plotCtx.strokeStyle = '#333';
+            plotCtx.strokeStyle = COL_ACCENT_DARK;
             plotCtx.lineWidth = 1;
             plotCtx.setLineDash([4, 4]);
             plotCtx.beginPath();

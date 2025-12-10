@@ -27,10 +27,20 @@
         
         <!-- Plot Area -->
         <div class="section-plot">
-            <canvas id="plot-canvas"></canvas>
+            <div id="plots-container" style="width: 100%; height: 100%; display: flex; flex-direction: column;">
+                <div style="flex: 1; position: relative;">
+                    <canvas id="plot-canvas" style="width: 100%; height: 100%;"></canvas>
+                </div>
+                <div id="velocity-container" style="flex: 1; position: relative; border-top: 1px solid var(--color-border); display: none;">
+                    <canvas id="velocity-canvas" style="width: 100%; height: 100%;"></canvas>
+                </div>
+            </div>
             
             <!-- Playback Controls (Overlay) -->
             <div id="playback-overlay" class="playback-controls hidden">
+                <button id="delete-recording-button" class="icon-button" style="color: var(--color-accent);">
+                    <span class="material-icons">delete_outline</span>
+                </button>
                 <div class="playback-info">
                    <span id="playback-time">0.0s</span>
                 </div>
@@ -63,6 +73,14 @@
                         <span class="slider round"></span>
                     </label>
                 </div>
+
+                <div class="control-group">
+                    <span>SHOW VELOCITY</span>
+                    <label class="switch">
+                        <input type="checkbox" id="show-velocity">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
                 
                 <div class="control-group">
                     <span>SHOW GRID</span>
@@ -70,6 +88,14 @@
                         <input type="checkbox" id="show-grid" checked>
                         <span class="slider round"></span>
                     </label>
+                </div>
+                
+                <div class="control-group" style="padding: 8px 0;">
+                    <span>SMOOTHING</span>
+                    <div style="flex: 1; margin: 0 12px; display: flex; align-items: center;">
+                        <input type="range" id="smoothing-slider" min="0" max="20" value="0" step="1">
+                    </div>
+                    <span id="smoothing-value" style="font-family: var(--font-mono); min-width: 20px; text-align: right;">0</span>
                 </div>
 
                 <div class="control-group centered-buttons">
