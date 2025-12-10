@@ -1,193 +1,421 @@
 /* || Imports */
-
 @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
 /* || Variables */
-
 :root {
-    /* || Colors -- */
-    --color-background-page: #ffffff;
-    --color-background-primary: #efefef;
-    --color-text-primary: #000000;
-    --color-accent: #1484e6;
-    --color-border-primary: #c3c7cb;
-    /* || Dimension */
-
+    /* Palette */
+    --color-bg: #ffffff;
+    --color-bg-panel: #ffffff;
+    --color-bg-track: #f7f9fb;
+    
+    --color-text-main: #1a1a1a;
+    --color-text-muted: #555555;
+    
+    /* Blue Shades */
+    --color-accent: #1484e6;        /* Main Blue */
+    --color-accent-dark: #0f6cb8;   /* Darker Blue */
+    --color-accent-light: #5faaf0;  /* Lighter Blue */
+    --color-accent-bg: #e6f2fc;     /* Very Light Blue */
+    
+    --color-record: #0f6cb8; 
+    
+    --color-border: #e0e0e0;
+    --shadow-soft: 0 4px 12px rgba(0,0,0,0.05);
+    --shadow-medium: 0 4px 20px rgba(0,0,0,0.08);
+    
+    --font-ui: 'Inter', sans-serif;
+    --font-mono: 'Space Mono', monospace;
+    
+    --radius-md: 12px;
+    --radius-full: 9999px;
 }
 
-/* || General styles */
-
-::selection {
-    color: var(--color-background-page);
-    background-color: var(--color-accent);
+/* || Reset & Base */
+* {
+    box-sizing: border-box;
+    touch-action: none; 
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
-html {
-    background-color: var(--color-background-page);
-    color: var(--color-text-primary);
-}
-
-body {
+html, body {
     margin: 0;
-}
-
-.page-layout {
-    display: flex;
-    flex-direction: column-reverse;
-}
-
-.panel {
-    background-color: var(--color-background-page);
-    border-top: 1px var(--color-border-primary) solid;
-    border-right: 0px;
-    overflow: visible;
-}
-
-.space-canvas-container {
+    padding: 0;
     width: 100%;
-    height: calc(100vh - 300px);
-    position: relative; /* For text overlay if needed */
+    height: 100%;
+    background-color: var(--color-bg);
+    color: var(--color-text-main);
+    font-family: var(--font-ui);
+    overflow: hidden;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* || Rotate Hint */
+#rotate-hint {
+    display: none; /* Default hidden */
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background-color: rgba(255,255,255,0.95);
+    backdrop-filter: blur(10px);
+    z-index: 10000;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 40px;
+}
+#rotate-hint .material-icons {
+    font-size: 48px;
+    color: var(--color-accent);
+    margin-bottom: 20px;
+}
+
+/* Show hint ONLY on small screens in portrait AND if not dismissed */
+@media screen and (max-width: 600px) and (orientation: portrait) {
+    #rotate-hint.active {
+        display: flex;
+    }
+}
+
+.text-button {
+    background: transparent;
+    border: 1px solid var(--color-border);
+    padding: 8px 16px;
+    border-radius: var(--radius-md);
+    margin-top: 20px;
+    color: var(--color-text-muted);
+    font-weight: 500;
+}
+.text-button:active {
+    background-color: var(--color-bg-track);
+}
+
+
+/* || Layout */
+.app-container {
+    display: grid;
+    width: 100%;
+    height: 100%;
+    /* Default / Portrait Layout */
+    grid-template-areas: 
+        "track"
+        "plot"
+        "panel";
+    grid-template-rows: 1fr 40vh min-content;
+    grid-template-columns: 100%;
+}
+
+@media screen and (max-width: 600px) and (orientation: portrait) {
+    /* Refine portrait for mobile to ensure fit */
+    .app-container {
+        grid-template-rows: 1fr 35vh auto; /* slightly smaller plot on small screens? */
+    }
+}
+
+@media screen and (orientation: landscape) {
+    .app-container {
+        grid-template-areas:
+            "plot panel"
+            "track track";
+        grid-template-rows: 1fr 140px; 
+        grid-template-columns: 1fr 340px; 
+    }
+}
+
+/* || Track Section */
+.section-track {
+    grid-area: track;
+    position: relative;
+    background-color: var(--color-bg-track);
+    border-bottom: 1px solid var(--color-border);
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.02);
+}
+
+@media screen and (orientation: landscape) {
+    .section-track {
+        border-bottom: none;
+        border-top: 1px solid var(--color-border);
+    }
 }
 
 #space-canvas {
-    top: 0;
-    left: 0;
     width: 100%;
     height: 100%;
     cursor: grab;
-    touch-action: none;
+    display: block;
+}
+#space-canvas:active { cursor: grabbing; }
+
+/* || Plot Section */
+.section-plot {
+    grid-area: plot;
+    position: relative;
+    background-color: var(--color-bg);
+    display: flex;
 }
 
-#space-canvas:active {
-    cursor: grabbing;
+@media screen and (orientation: landscape) {
+    .section-plot {
+        border-right: 1px solid var(--color-border);
+    }
 }
 
-.plots-container {
-    padding: 20px;
-}
-
-canvas.plot-canvas {
+#plot-canvas {
     width: 100%;
-    height: 250px; /* Made it slightly bigger as it's the only plot */
-    background-color: var(--color-background-page);
-    border-radius: 0px;
+    height: 100%;
+    display: block;
+    cursor: crosshair;
 }
 
-@media (min-width: 768px) and (orientation: landscape) {
-    .page-layout {
-        flex-direction: row;
-    }
+/* || Playback Controls */
+.playback-controls {
+    position: absolute;
+    /* Move to right */
+    top: 20px;
+    right: 20px; 
+    background: rgba(255, 255, 255, 0.9);
+    padding: 6px 14px;
+    border-radius: var(--radius-full);
+    box-shadow: var(--shadow-medium);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid var(--color-border);
+    z-index: 15;
+    /* Add transition for smooth show/hide */
+    transition: opacity 0.2s, transform 0.2s;
+}
 
-    .panel {
-        width: 400px; /* Slightly narrower than inertia */
-        height: 100vh;
-        border-top: 0px;
-        border-right: 1px var(--color-border-primary) solid;
-        overflow: auto;
-    }
+.playback-controls.hidden {
+    display: flex !important; /* Override explicit hidden to allow transition? No, just use opacity. */
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-10px);
+}
 
-    .space-canvas-container {
-        height: 100vh;
-        flex-grow: 1;
+.playback-info {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: bold;
+    color: var(--color-accent);
+    min-width: 50px;
+    text-align: right;
+}
+
+.icon-button-large {
+    background: var(--color-accent);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 36px; height: 36px;
+    display: flex;
+    align-items: center; justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(20, 132, 230, 0.3);
+}
+.icon-button-large:hover {
+    background: var(--color-accent-hover);
+}
+.icon-button-large .material-icons {
+    font-size: 20px;
+}
+
+/* || Panel Section */
+.section-panel {
+    grid-area: panel;
+    background-color: var(--color-bg-panel);
+    padding: 24px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    z-index: 5;
+    max-height: 40vh; /* Limit height in portrait so track/plot remain visible */
+}
+
+@media screen and (orientation: landscape) {
+    .section-panel {
+        max-height: none;
+        border-left: 1px solid var(--color-border);
     }
 }
 
-.centered {
-    padding: 20px;
+.panel-content {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.header h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--color-text-main);
+    letter-spacing: -0.5px;
+}
+
+/* || Controls & Inputs */
+.control-group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.control-group span {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+}
+
+.centered-buttons {
+    justify-content: stretch;
+    gap: 12px;
+}
+
+/* Toggle Switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+    position: absolute; cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #e0e0e0;
+    transition: .3s;
+    border-radius: 24px;
+}
+.slider:before {
+    position: absolute; content: "";
+    height: 18px; width: 18px;
+    left: 3px; bottom: 3px;
+    background-color: white;
+    transition: .3s;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+input:checked + .slider { background-color: var(--color-accent); }
+input:checked + .slider:before { transform: translateX(20px); }
+
+/* Buttons */
+button {
+    cursor: pointer;
+    border: none;
+    font-family: var(--font-mono);
+    transition: all 0.2s;
+    outline: none;
+}
+
+.icon-button {
+    background: transparent;
+    color: var(--color-text-main);
+    padding: 8px;
+    border-radius: 50%;
+}
+.icon-button:hover { background-color: rgba(0,0,0,0.05); }
+
+.action-button {
+    flex: 1;
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-main);
+    padding: 12px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 700;
+}
+.action-button:hover {
+    background-color: var(--color-bg-secondary);
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+#clear-button:hover {
+    border-color: var(--color-record);
+    color: var(--color-record);
+}
+
+/* Floating Record Button */
+.fab-button {
+    position: absolute;
+    width: 64px; height: 64px; 
+    border-radius: var(--radius-full);
+    background-color: var(--color-bg);
+    color: var(--color-record);
+    border: 6px solid rgba(20, 132, 230, 0.15); 
+    box-shadow: var(--shadow-medium);
+    z-index: 20;
     display: grid;
     place-items: center;
 }
 
-/* || Button */
-
-button.big-button {
-    width: 95%;
-    height: 40px;
-    border: none;
-    border-radius: 5px;
-    color: var(--color-background-page);
-    background-color: var(--color-accent);
-    font-weight: bold;
-    cursor: pointer;
-    transition: .1s;
+.fab-button .material-icons {
+    font-size: 32px;
 }
 
-button.big-button:hover {
-    background-color: #2079c7;
+.fab-button:hover {
+    transform: scale(1.05);
+    border-color: rgba(20, 132, 230, 0.25);
+}
+.fab-button:active {
+    transform: scale(0.95);
 }
 
-/* || Toggle switch */
-
-/* The switch - the box around the slider */
-.switch {
-    position: relative;
-    display: inline-block;
-    width: 40px;
-    height: 24px;
+.fab-button.recording {
+    background-color: var(--color-record);
+    color: white;
+    border-color: rgba(20, 132, 230, 0.3);
+    animation: pulse 2s infinite;
 }
 
-/* Hide default HTML checkbox */
-.switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(20, 132, 230, 0.4); }
+    70% { box-shadow: 0 0 0 15px rgba(20, 132, 230, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(20, 132, 230, 0); }
 }
 
-/* The slider */
-.slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    box-shadow: 0 0 0 2px var(--color-border-primary);
-    background-color: var(--color-background-page);
-    -webkit-transition: .1s;
-    transition: .1s;
+@media screen and (orientation: landscape) {
+    .fab-button {
+        bottom: 24px;
+        right: 24px;
+    }
+}
+@media screen and (orientation: portrait) {
+    .fab-button {
+        bottom: 24px;
+        left: 24px; /* Move to left in portrait? Prompt said "Right" before, but usually FABs are right. */
+        right: auto;
+    }
+    /* Wait, prompt didn't specify position in portrait, but let's keep it safe. 
+       Usually right is better for thumb. 
+    */
+    .fab-button {
+        bottom: 24px;
+        left: auto;
+        right: 24px;
+    }
 }
 
-.slider:before {
-    position: absolute;
-    content: "";
-    height: 16px;
-    width: 16px;
-    left: 4px;
-    bottom: 4px;
-    background-color: var(--color-border-primary);
-    -webkit-transition: .1s;
-    transition: .1s;
-}
-
-input:checked+.slider {
-    box-shadow: none;
-    background-color: var(--color-accent);
-}
-
-input:focus+.slider {
-    box-shadow:
-        0 0 0 3px var(--color-background-page),
-        0 0 0 6px var(--color-text-primary);
-}
-
-input:checked+.slider:before {
-    background-color: var(--color-background-page);
-    -webkit-transform: translateX(16px);
-    -ms-transform: translateX(16px);
-    transform: translateX(16px);
-}
-
-/* Rounded sliders */
-.slider.round {
-    border-radius: 24px;
-}
-
-.slider.round:before {
-    border-radius: 50%;
-}
-
-/* || Typography */
-
-* {
-    font-family: "Space Mono", monospace;
+.instructions p {
+    font-family: var(--font-ui);
+    font-size: 13px;
+    color: var(--color-text-muted);
+    line-height: 1.5;
+    margin: 0;
+    text-align: center;
 }

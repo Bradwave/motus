@@ -12,47 +12,86 @@
     <title>Motus</title>
 
     <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=cleaning_services,fiber_manual_record,stop_circle" />
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
 
 <body>
-    <div class="page-layout" tabindex="-1" id="main-container">
-        <aside class="panel">
-            <div class="plots-container">
-                <h2>
-                    <b>Motus</b>
-                </h2>
-                <p>
-                    <b>SHOW TRACE</b>
-                    <span style="margin-left: 10px;"></span>
+    <!-- Rotate Hint Overlay -->
+    <div id="rotate-hint">
+        <span class="material-icons icon-large">screen_rotation</span>
+        <p>Please rotate your device for the best experience</p>
+        <button id="dismiss-rotate-hint" class="text-button">Dismiss</button>
+    </div>
+
+    <div class="app-container" id="main-container">
+        
+        <!-- Plot Area -->
+        <div class="section-plot">
+            <canvas id="plot-canvas"></canvas>
+            
+            <!-- Playback Controls (Overlay) -->
+            <div id="playback-overlay" class="playback-controls hidden">
+                <div class="playback-info">
+                   <span id="playback-time">0.0s</span>
+                </div>
+                <!-- Swapped order so time is left of button if row, or just styling -->
+                <button id="play-pause-button" class="icon-button-large">
+                    <span class="material-icons" id="play-icon">play_arrow</span>
+                </button>
+            </div>
+
+            <!-- Record Button -->
+            <button id="record-button" class="fab-button">
+                <span class="material-icons" id="record-icon">fiber_manual_record</span>
+            </button>
+        </div>
+
+        <!-- Options Panel -->
+        <aside class="section-panel">
+            <div class="panel-content">
+                <div class="header">
+                    <h2><b>Motus</b></h2>
+                    <button id="fullscreen-button" class="icon-button">
+                        <span class="material-icons" id="fullscreen-icon">fullscreen</span>
+                    </button>
+                </div>
+                
+                <div class="control-group">
+                    <span>SHOW TRACE</span>
                     <label class="switch">
                         <input type="checkbox" id="show-trace">
                         <span class="slider round"></span>
                     </label>
-                </p>
-                <div class="centered">
-                    <button id="record-button" class="big-button" style="margin-bottom: 10px;">
-                        <span class="material-symbols-outlined" id="record-icon">
-                            fiber_manual_record
-                        </span>
-                        <span id="record-text">RECORD</span>
-                    </button>
-                    <button id="clear-button" class="big-button" style="background-color: #e63946;"> <!-- Different color for clear? Or keep accent? Stick to consistent style for now, maybe just accent -->
-                        <span class="material-symbols-outlined">
-                            cleaning_services
-                        </span>
+                </div>
+                
+                <div class="control-group">
+                    <span>SHOW GRID</span>
+                    <label class="switch">
+                        <input type="checkbox" id="show-grid" checked>
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+
+                <div class="control-group centered-buttons">
+                    <button id="clear-button" class="action-button">
+                        <span class="material-icons">delete</span>
                         <span>CLEAR</span>
                     </button>
+                    <div id="desktop-record-placeholder"></div> 
                 </div>
-                <p>Position - Time</p>
-                <canvas id="plot-canvas" class="plot-canvas"></canvas>
+                
+                <div class="instructions">
+                    <p>Hold <b>'R'</b> or the Record button to record motion.</p>
+                </div>
             </div>
         </aside>
-        <div class="space-canvas-container">
+
+        <!-- Track/Space Area -->
+        <div class="section-track">
             <canvas id="space-canvas"></canvas>
         </div>
     </div>
-    <script src="js/script.js"></script>
+
+    <script src="js/main.js"></script>
 </body>
 </html>
