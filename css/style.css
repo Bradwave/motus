@@ -100,19 +100,19 @@ html, body {
     display: grid;
     width: 100%;
     height: 100%;
-    /* Default / Portrait Layout */
+    /* Default / Portrait Layout - new order: plot, controls, track, panel */
     grid-template-areas: 
-        "track"
         "plot"
+        "controls"
+        "track"
         "panel";
-    grid-template-rows: 1fr 40vh min-content;
+    grid-template-rows: 1fr auto auto auto;
     grid-template-columns: 100%;
 }
 
 @media screen and (max-width: 600px) and (orientation: portrait) {
-    /* Refine portrait for mobile to ensure fit */
     .app-container {
-        grid-template-rows: 1fr 35vh auto; /* slightly smaller plot on small screens? */
+        grid-template-rows: 1fr auto auto auto;
     }
 }
 
@@ -121,7 +121,7 @@ html, body {
         grid-template-areas:
             "plot panel"
             "track track";
-        grid-template-rows: 1fr 140px; 
+        grid-template-rows: 1fr 110px; 
         grid-template-columns: 1fr 340px; 
     }
 }
@@ -135,12 +135,26 @@ html, body {
     box-shadow: inset 0 0 20px rgba(0,0,0,0.02);
     min-width: 0;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 @media screen and (orientation: landscape) {
     .section-track {
         border-bottom: none;
         border-top: 1px solid var(--color-border);
+        flex-direction: row;
+        align-items: center;
+        padding: 0 8px 0 24px; /* More space from left border */
+        gap: 24px;
+    }
+}
+
+@media screen and (orientation: portrait) {
+    .section-track {
+        border-top: 1px solid var(--color-border);
+        border-bottom: none;
+        padding: 8px 6px;
     }
 }
 
@@ -150,7 +164,54 @@ html, body {
     cursor: grab;
     display: block;
 }
+
+@media screen and (orientation: landscape) {
+    #space-canvas {
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
+    }
+}
+
+@media screen and (orientation: portrait) {
+    #space-canvas {
+        height: 80px;
+    }
+}
+
 #space-canvas:active { cursor: grabbing; }
+
+/* Track controls container - for portrait mode */
+#track-controls {
+    grid-area: controls;
+    display: none;
+}
+
+@media screen and (orientation: portrait) {
+    #track-controls {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 10px 16px;
+        min-height: 76px; /* Ensure panel contains the 56px record button + padding */
+        background: var(--color-bg-panel);
+        border-top: 1px solid var(--color-border);
+        border-bottom: 1px solid var(--color-border);
+        position: relative;
+    }
+    
+    /* Record button on the left side */
+    #track-controls .fab-button {
+        position: absolute;
+        left: 16px;
+    }
+    
+    /* Left-handed mode: record on right */
+    body.left-handed #track-controls .fab-button {
+        left: auto;
+        right: 16px;
+    }
+}
 
 /* || Plot Section */
 .section-plot {
@@ -176,28 +237,23 @@ html, body {
 }
 
 /* || Playback Controls */
-/* || Playback Controls */
 .playback-controls {
     position: absolute;
-    /* Move to right */
-    top: 20px;
-    right: 20px;
-    margin: 10px;
-    background: rgba(255, 255, 255, 0.9);
-    padding: 6px 14px;
+    top: 12px;
+    right: 12px;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 4px 10px;
     border-radius: var(--radius-full);
-    box-shadow: var(--shadow-medium);
+    box-shadow: var(--shadow-soft);
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     border: 1px solid var(--color-border);
     z-index: 15;
-    /* Add transition for smooth show/hide */
     transition: opacity 0.2s, transform 0.2s;
 }
 
 .playback-controls.hidden {
-    display: flex !important; /* Override explicit hidden to allow transition? No, just use opacity. */
     opacity: 0;
     pointer-events: none;
     transform: translateY(-10px);
@@ -205,10 +261,10 @@ html, body {
 
 .playback-info {
     font-family: var(--font-mono);
-    font-size: 14px;
+    font-size: 12px;
     font-weight: bold;
     color: var(--color-accent);
-    min-width: 50px;
+    min-width: 40px;
     text-align: right;
 }
 
@@ -217,7 +273,7 @@ html, body {
     color: white;
     border: none;
     border-radius: 50%;
-    width: 36px; height: 36px;
+    width: 28px; height: 28px;
     display: flex;
     align-items: center; justify-content: center;
     cursor: pointer;
@@ -230,34 +286,64 @@ html, body {
     transform: scale(0.95);
 }
 .icon-button-large .material-icons {
-    font-size: 20px;
+    font-size: 16px;
+}
+
+/* Playback in track controls (vertical mode) - keep same look, just static */
+.playback-controls.in-track {
+    position: static;
+    top: auto;
+    right: auto;
+    transform: none;
+}
+.playback-controls.in-track.hidden {
+    display: none;
 }
 
 /* || Panel Section */
 .section-panel {
     grid-area: panel;
     background-color: var(--color-bg-panel);
-    padding: 24px;
+    padding: 16px 20px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
     z-index: 5;
-    max-height: 40vh; /* Limit height in portrait so track/plot remain visible */
-    min-width: 0; 
-    /* No min-height: 0 here necessarily, as it's min-content or auto sized, but safe to have */
+    max-height: 35vh;
+    min-width: 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+}
+
+.section-panel::-webkit-scrollbar {
+    width: 4px;
+}
+.section-panel::-webkit-scrollbar-track {
+    background: transparent;
+}
+.section-panel::-webkit-scrollbar-thumb {
+    background-color: var(--color-border);
+    border-radius: 4px;
 }
 
 @media screen and (orientation: landscape) {
     .section-panel {
         max-height: none;
         border-left: 1px solid var(--color-border);
+        padding: 20px;
     }
 }
 
 .panel-content {
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 16px;
+}
+
+@media screen and (orientation: landscape) {
+    .panel-content {
+        gap: 20px;
+    }
 }
 
 .header {
@@ -425,19 +511,20 @@ button {
 /* Floating Record Button */
 .fab-button {
     position: absolute;
-    width: 64px; height: 64px; 
+    width: 56px; height: 56px; 
     border-radius: var(--radius-full);
     background-color: var(--color-bg);
     color: var(--color-record);
-    border: 6px solid rgba(20, 132, 230, 0.15); 
+    border: 5px solid rgba(20, 132, 230, 0.15); 
     box-shadow: var(--shadow-medium);
     z-index: 20;
     display: grid;
     place-items: center;
+    flex-shrink: 0;
 }
 
 .fab-button .material-icons {
-    font-size: 32px;
+    font-size: 28px;
 }
 
 .fab-button:hover {
@@ -461,17 +548,22 @@ button {
     100% { box-shadow: 0 0 0 0 rgba(20, 132, 230, 0); }
 }
 
+/* Landscape mode: record button on left side of track, centered vertically */
 @media screen and (orientation: landscape) {
     .fab-button {
-        bottom: 24px;
-        right: 24px;
+        position: static;
+    }
+    
+    /* Left-handed mode: button on right */
+    body.left-handed .section-track {
+        flex-direction: row-reverse;
     }
 }
+
+/* Portrait mode: button in track controls, not absolute */
 @media screen and (orientation: portrait) {
-    .fab-button {
-        bottom: 24px; /* Default */
-        left: auto;
-        right: 24px; /* Ensure right alignment as per typical FAB */
+    .fab-button.in-track {
+        position: static;
     }
 }
 

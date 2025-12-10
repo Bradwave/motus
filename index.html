@@ -9,7 +9,7 @@
 
     <meta name="description" content="Motion physics simulation and plotter">
 
-    <title>Motus</title>
+    <title>Motus operandi</title>
 
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
@@ -36,7 +36,7 @@
                 </div>
             </div>
             
-            <!-- Playback Controls (Overlay) -->
+            <!-- Playback Controls (Overlay) - position changes based on mode -->
             <div id="playback-overlay" class="playback-controls hidden">
                 <button id="delete-recording-button" class="icon-button" style="color: var(--color-accent);">
                     <span class="material-icons">delete_outline</span>
@@ -44,13 +44,12 @@
                 <div class="playback-info">
                    <span id="playback-time">0.0s</span>
                 </div>
-                <!-- Swapped order so time is left of button if row, or just styling -->
                 <button id="play-pause-button" class="icon-button-large">
                     <span class="material-icons" id="play-icon">play_arrow</span>
                 </button>
             </div>
 
-            <!-- Record Button -->
+            <!-- Record Button - position changes based on mode -->
             <button id="record-button" class="fab-button">
                 <span class="material-icons" id="record-icon">fiber_manual_record</span>
             </button>
@@ -60,7 +59,7 @@
         <aside class="section-panel">
             <div class="panel-content">
                 <div class="header">
-                    <h2><b>Motus</b></h2>
+                    <h2><b>Motus operandi</b></h2>
                     <button id="fullscreen-button" class="icon-button">
                         <span class="material-icons" id="fullscreen-icon">fullscreen</span>
                     </button>
@@ -106,12 +105,18 @@
                     <span id="smoothing-value" style="font-family: var(--font-mono); min-width: 20px; text-align: right;">0</span>
                 </div>
 
+                <div class="control-group">
+                    <span>LEFT-HANDED</span>
+                    <label class="switch">
+                        <input type="checkbox" id="left-handed">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+
                 <div class="control-group centered-buttons">
                     <button id="clear-button" class="action-button">
-                        <!--span class="material-icons">cleaning_services</span-->
                         <span>CLEAR</span>
-                    </button>
-                    <div id="desktop-record-placeholder"></div> 
+                    </button> 
                 </div>
                 
                 <div class="instructions">
@@ -119,6 +124,10 @@
                 </div>
             </div>
         </aside>
+        <!-- Track Controls - for portrait mode (record + playback) -->
+        <div id="track-controls">
+            <!-- Record button and playback overlay will be moved here via JS in portrait mode -->
+        </div>
 
         <!-- Track/Space Area -->
         <div class="section-track">

@@ -21,6 +21,9 @@ const dismissRotateHintBtn = document.getElementById('dismiss-rotate-hint');
 const deleteRecBtn = document.getElementById('delete-recording-button'); // New
 const smoothingSlider = document.getElementById('smoothing-slider'); // New
 const smoothingValue = document.getElementById('smoothing-value'); // New
+const leftHandedCheckbox = document.getElementById('left-handed'); // Left-handed toggle
+const trackControls = document.getElementById('track-controls');
+const trackControlsInner = document.getElementById('track-controls-inner');
 let rawRecordings = []; // New
 let recordingSmoothingValues = []; // Store smoothing value for each recording
 
@@ -87,7 +90,8 @@ function saveOptions() {
         showBallOnPlot: showBallOnPlotCheckbox.checked,
         showVelocity: showVelocityCheckbox.checked,
         showGrid: showGridCheckbox.checked,
-        smoothing: parseInt(smoothingSlider.value, 10)
+        smoothing: parseInt(smoothingSlider.value, 10),
+        leftHanded: leftHandedCheckbox.checked
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(options));
 }
@@ -108,11 +112,28 @@ function loadOptions() {
                 smoothingSlider.value = options.smoothing;
                 smoothingValue.innerText = options.smoothing;
             }
+            if (typeof options.leftHanded === 'boolean') {
+                leftHandedCheckbox.checked = options.leftHanded;
+                applyLeftHandedMode(options.leftHanded);
+            }
         }
     } catch (e) {
         console.warn('Failed to load options from localStorage:', e);
     }
 }
+
+function applyLeftHandedMode(enabled) {
+    if (enabled) {
+        document.body.classList.add('left-handed');
+    } else {
+        document.body.classList.remove('left-handed');
+    }
+}
+
+leftHandedCheckbox.addEventListener('change', () => {
+    applyLeftHandedMode(leftHandedCheckbox.checked);
+    saveOptions();
+});
 
 // Load options on startup
 loadOptions();
@@ -148,8 +169,8 @@ resizeObserver.observe(document.getElementById('main-container'));
 function resize() {
     const dpr = window.devicePixelRatio || 1;
     
-    // Space
-    const rect = spaceCanvas.parentElement.getBoundingClientRect();
+    // Space - use canvas's own rect for correct sizing
+    const rect = spaceCanvas.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
 
     spaceCanvas.width = rect.width * dpr;
@@ -158,6 +179,9 @@ function resize() {
     spaceCtx.scale(dpr, dpr);
     
     isVertical = rect.height > rect.width;
+    
+    // Handle vertical/portrait mode layout
+    handleOrientationLayout();
 
 // ... Inside resize function
     // Plot
@@ -174,6 +198,37 @@ function resize() {
         velocityCanvas.height = rectV.height * dpr;
         velocityCtx.resetTransform();
         velocityCtx.scale(dpr, dpr);
+    }
+}
+
+function handleOrientationLayout() {
+    const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+    
+    if (isPortrait) {
+        // Move record button and playback to track controls
+        recordBtn.classList.add('in-track');
+        playbackOverlay.classList.add('in-track');
+        
+        // Move elements to track controls directly
+        if (trackControls && recordBtn.parentElement !== trackControls) {
+            trackControls.appendChild(recordBtn);
+            trackControls.appendChild(playbackOverlay);
+        }
+    } else {
+        // Move back to section-track for landscape
+        recordBtn.classList.remove('in-track');
+        playbackOverlay.classList.remove('in-track');
+        
+        const sectionTrack = document.querySelector('.section-track');
+        if (sectionTrack && recordBtn.parentElement !== sectionTrack) {
+            // Insert at the beginning for left side positioning
+            sectionTrack.insertBefore(recordBtn, sectionTrack.firstChild);
+            // Playback overlay goes to plot section
+            const sectionPlot = document.querySelector('.section-plot');
+            if (sectionPlot) {
+                sectionPlot.appendChild(playbackOverlay);
+            }
+        }
     }
 }
 
@@ -388,17 +443,24 @@ function drawVelocity() {
             const rec = recordings[selectedRecIndex];
             const velInterval = 5;
             
-            // Find velocity at hover time
+            // Only show blue dot if hoverTime is within the recording's time range
+            const recMinTime = rec[0].t;
+            const recMaxTime = rec[rec.length - 1].t;
+            const isInTimeRange = hoverTime >= recMinTime && hoverTime <= recMaxTime;
+            
+            // Find velocity at hover time (only if in range)
             let velValue = null;
-            for (let i = velInterval; i < rec.length - velInterval; i++) {
-                if (rec[i].t >= hoverTime) {
-                    const halfInt = Math.min(velInterval, i, rec.length - 1 - i);
-                    if (halfInt >= 1) {
-                        const dx = rec[i + halfInt].x - rec[i - halfInt].x;
-                        const dt = rec[i + halfInt].t - rec[i - halfInt].t;
-                        velValue = dt > 0 ? dx / dt : 0;
+            if (isInTimeRange) {
+                for (let i = velInterval; i < rec.length - velInterval; i++) {
+                    if (rec[i].t >= hoverTime) {
+                        const halfInt = Math.min(velInterval, i, rec.length - 1 - i);
+                        if (halfInt >= 1) {
+                            const dx = rec[i + halfInt].x - rec[i - halfInt].x;
+                            const dt = rec[i + halfInt].t - rec[i - halfInt].t;
+                            velValue = dt > 0 ? dx / dt : 0;
+                        }
+                        break;
                     }
-                    break;
                 }
             }
             
@@ -433,6 +495,22 @@ function drawVelocity() {
                     velocityCtx.textBaseline = 'middle';
                     velocityCtx.fillText(labelText, labelX, labelY);
                 }
+            } else if (isHoveringVelocity) {
+                // Graph selected but pointer NOT in time range - show only time
+                const labelText = `t: ${hoverTime.toFixed(2)}s`;
+                
+                velocityCtx.font = '11px Space Mono';
+                const textWidth = velocityCtx.measureText(labelText).width;
+                const labelX = Math.min(hoverX + 8, w - padR - textWidth - 5);
+                const labelY = padT + 15;
+                
+                velocityCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                velocityCtx.fillRect(labelX - 3, labelY - 11, textWidth + 6, 14);
+                
+                velocityCtx.fillStyle = '#333';
+                velocityCtx.textAlign = 'left';
+                velocityCtx.textBaseline = 'middle';
+                velocityCtx.fillText(labelText, labelX, labelY);
             }
         } else if (isHoveringVelocity) {
             // No recording selected, just show time
@@ -467,20 +545,22 @@ dismissRotateHintBtn.addEventListener('click', () => {
 function valToSpace(val) {
     const w = spaceCanvas.width / window.devicePixelRatio;
     const h = spaceCanvas.height / window.devicePixelRatio;
-    const padding = 60; 
+    // Dynamic padding - smaller for compact canvases
+    const paddingH = Math.min(60, h * 0.15);
+    const paddingW = Math.min(60, w * 0.1);
 
     if (isVertical) {
-        const effectiveH = h - 2 * padding;
+        const effectiveH = h - 2 * paddingH;
         const norm = (val + 1) / 2; 
         return { 
             x: w / 2, 
-            y: h - padding - (norm * effectiveH) 
+            y: h - paddingH - (norm * effectiveH) 
         };
     } else {
-        const effectiveW = w - 2 * padding;
+        const effectiveW = w - 2 * paddingW;
         const norm = (val + 1) / 2;
         return { 
-            x: padding + norm * effectiveW, 
+            x: paddingW + norm * effectiveW, 
             y: h / 2 
         };
     }
@@ -489,15 +569,17 @@ function valToSpace(val) {
 function spaceToVal(x, y) {
     const w = spaceCanvas.width / window.devicePixelRatio;
     const h = spaceCanvas.height / window.devicePixelRatio;
-    const padding = 60;
+    // Dynamic padding - smaller for compact canvases
+    const paddingH = Math.min(60, h * 0.15);
+    const paddingW = Math.min(60, w * 0.1);
     
     if (isVertical) {
-        const effectiveH = h - 2 * padding;
-        let norm = (h - padding - y) / effectiveH;
+        const effectiveH = h - 2 * paddingH;
+        let norm = (h - paddingH - y) / effectiveH;
         return Math.max(0, Math.min(1, norm)) * 2 - 1;
     } else {
-        const effectiveW = w - 2 * padding;
-        let norm = (x - padding) / effectiveW;
+        const effectiveW = w - 2 * paddingW;
+        let norm = (x - paddingW) / effectiveW;
         return Math.max(0, Math.min(1, norm)) * 2 - 1;
     }
 }
@@ -534,6 +616,23 @@ function endDrag(e) {
 spaceCanvas.addEventListener('pointerup', endDrag);
 spaceCanvas.addEventListener('pointercancel', endDrag);
 
+// Haptic feedback helper
+function triggerHaptic(type = 'light') {
+    if ('vibrate' in navigator) {
+        switch(type) {
+            case 'light':
+                navigator.vibrate(10);
+                break;
+            case 'medium':
+                navigator.vibrate(25);
+                break;
+            case 'heavy':
+                navigator.vibrate([50, 30, 50]);
+                break;
+        }
+    }
+}
+
 // Recording
 function startRecording() {
     if (isRecording || isPlaying) return;
@@ -544,6 +643,9 @@ function startRecording() {
     recordBtn.classList.add('recording');
     recordIcon.innerText = 'stop_circle';
     
+    // Haptic feedback on mobile
+    triggerHaptic('medium');
+    
     selectedRecIndex = -1;
     togglePlaybackUI(false);
 }
@@ -551,6 +653,10 @@ function startRecording() {
 function stopRecording() {
     if (!isRecording) return;
     isRecording = false;
+    
+    // Haptic feedback on mobile
+    triggerHaptic('heavy');
+    
     if (currentRec.length > 1) {
         // Save to raw
         rawRecordings.push(currentRec);
@@ -867,7 +973,9 @@ function drawSpace() {
     
     spaceCtx.clearRect(0, 0, w, h);
     
-    const padding = 60;
+    // Dynamic padding - smaller for compact canvases
+    const paddingH = Math.min(60, h * 0.15);
+    const paddingW = Math.min(60, w * 0.1);
     
     spaceCtx.strokeStyle = COL_AXIS;
     spaceCtx.lineWidth = 2;
@@ -876,11 +984,11 @@ function drawSpace() {
     
     let pStart, pEnd;
     if (isVertical) {
-        pStart = {x: w/2, y: padding};
-        pEnd = {x: w/2, y: h - padding};
+        pStart = {x: w/2, y: paddingH};
+        pEnd = {x: w/2, y: h - paddingH};
     } else {
-        pStart = {x: padding, y: h/2};
-        pEnd = {x: w - padding, y: h/2};
+        pStart = {x: paddingW, y: h/2};
+        pEnd = {x: w - paddingW, y: h/2};
     }
     
     spaceCtx.moveTo(pStart.x, pStart.y);
@@ -1119,13 +1227,20 @@ function drawPlot() {
         // Snap to selected recording and show enhanced info
         if (selectedRecIndex !== -1 && recordings[selectedRecIndex]) {
             const rec = recordings[selectedRecIndex];
-            const posValue = interpolateX(rec, hoverTime);
+            
+            // Check if hoverTime is within the recording's time range
+            const recMinTime = rec[0].t;
+            const recMaxTime = rec[rec.length - 1].t;
+            const isInTimeRange = hoverTime >= recMinTime && hoverTime <= recMaxTime;
+            
+            // Only get position value if in time range
+            const posValue = isInTimeRange ? interpolateX(rec, hoverTime) : null;
             
             if (posValue !== null) {
                 // Calculate Y position on the graph
                 const posY = (h - padB) - ((posValue + 1) / 2) * plotH;
                 
-                // Draw highlighted point on the curve
+                // Draw highlighted point on the curve (only if in time range)
                 plotCtx.beginPath();
                 plotCtx.arc(hoverX, posY, 6, 0, Math.PI * 2);
                 plotCtx.fillStyle = COL_ACCENT;
@@ -1164,7 +1279,7 @@ function drawPlot() {
                     plotCtx.stroke();
                 }
                 
-                // Draw coordinate label with slope
+                // Draw coordinate label with slope (full info when in range)
                 if (isHoveringPlot) {
                     const labelText = velocity !== null 
                         ? `t: ${hoverTime.toFixed(2)}s, x: ${posValue.toFixed(2)}, v: ${velocity.toFixed(2)}`
@@ -1184,6 +1299,22 @@ function drawPlot() {
                     plotCtx.textBaseline = 'middle';
                     plotCtx.fillText(labelText, labelX, labelY);
                 }
+            } else if (isHoveringPlot) {
+                // Graph selected but pointer NOT in time range - show only time
+                const labelText = `t: ${hoverTime.toFixed(2)}s`;
+                
+                plotCtx.font = '11px Space Mono';
+                const textWidth = plotCtx.measureText(labelText).width;
+                const labelX = Math.min(hoverX + 8, w - padR - textWidth - 5);
+                const labelY = padT + 15;
+                
+                plotCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                plotCtx.fillRect(labelX - 3, labelY - 11, textWidth + 6, 14);
+                
+                plotCtx.fillStyle = '#333';
+                plotCtx.textAlign = 'left';
+                plotCtx.textBaseline = 'middle';
+                plotCtx.fillText(labelText, labelX, labelY);
             }
         } else if (isHoveringPlot) {
             // No recording selected, just show time
@@ -1263,5 +1394,13 @@ function interpolateX(rec, t) {
     }
     return rec[rec.length-1].x;
 }
+
+// Listen for orientation changes
+window.matchMedia('(orientation: portrait)').addEventListener('change', () => {
+    handleOrientationLayout();
+});
+
+// Initial layout setup
+handleOrientationLayout();
 
 loop();
