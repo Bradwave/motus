@@ -1,6 +1,5 @@
 /* || Imports */
 @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
 /* || Variables */
 :root {
@@ -24,11 +23,39 @@
     --shadow-soft: 0 4px 12px rgba(0,0,0,0.05);
     --shadow-medium: 0 4px 20px rgba(0,0,0,0.08);
     
-    --font-ui: 'Inter', sans-serif;
+    --font-ui: 'Space Mono', monospace;
     --font-mono: 'Space Mono', monospace;
     
     --radius-md: 12px;
     --radius-full: 9999px;
+}
+
+::selection {
+    color: var(--color-bg);
+    background-color: var(--color-accent);
+}
+
+/* Material Symbols */
+.material-symbols-outlined {
+    font-family: 'Material Symbols Outlined';
+    font-weight: normal;
+    font-style: normal;
+    font-size: 24px;
+    display: inline-block;
+    line-height: 1;
+    text-transform: none;
+    letter-spacing: normal;
+    word-wrap: normal;
+    white-space: nowrap;
+    direction: ltr;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'liga';
+}
+
+.material-symbols-outlined.icon-large {
+    font-size: 40px;
 }
 
 /* || Reset & Base */
@@ -145,8 +172,8 @@ html, body {
         border-top: 1px solid var(--color-border);
         flex-direction: row;
         align-items: center;
-        padding: 0 8px 0 24px; /* More space from left border */
-        gap: 24px;
+        padding: 0 24px 0 24px;
+        gap: 12px;
     }
 }
 
@@ -285,7 +312,7 @@ html, body {
 .icon-button-large:active {
     transform: scale(0.95);
 }
-.icon-button-large .material-icons {
+.icon-button-large .material-symbols-outlined {
     font-size: 16px;
 }
 
@@ -306,6 +333,9 @@ html, body {
     background-color: var(--color-bg-panel);
     padding: 16px 20px;
     overflow-y: auto;
+    /* Allow vertical scrolling on mobile for container AND children */
+    touch-action: pan-y; 
+    user-select: text; /* Allow selection */
     display: flex;
     flex-direction: column;
     z-index: 5;
@@ -313,6 +343,12 @@ html, body {
     min-width: 0;
     scrollbar-width: thin;
     scrollbar-color: var(--color-border) transparent;
+}
+
+/* Ensure children don't block scroll */
+.section-panel * {
+    touch-action: pan-y;
+    user-select: text;
 }
 
 .section-panel::-webkit-scrollbar {
@@ -370,12 +406,59 @@ html, body {
     font-size: 14px;
     font-weight: 600;
     color: var(--color-text-muted);
-    font-family: var(--font-mono);
 }
 
 .centered-buttons {
     justify-content: stretch;
     gap: 12px;
+}
+
+/* || Icon Toggles (Quick Actions) */
+.quick-actions-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.icon-toggle {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 48px;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 0;
+}
+
+.icon-toggle:active {
+    transform: scale(0.96);
+}
+
+.icon-toggle:hover {
+    background-color: var(--color-bg-track);
+    color: var(--color-text-main);
+}
+
+.icon-toggle.active {
+    background-color: var(--color-accent);
+    border-color: var(--color-accent);
+    color: white;
+    box-shadow: 0 4px 10px rgba(20, 132, 230, 0.25);
+}
+
+.icon-toggle .material-symbols-outlined {
+    font-size: 24px;
+}
+
+/* Flip the hand icon horizontally */
+#btn-hand .material-symbols-outlined {
+    transform: scaleX(-1);
 }
 
 /* Toggle Switch */
@@ -523,7 +606,7 @@ button {
     flex-shrink: 0;
 }
 
-.fab-button .material-icons {
+.fab-button .material-symbols-outlined {
     font-size: 28px;
 }
 

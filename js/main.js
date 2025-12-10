@@ -10,10 +10,11 @@ const velocityContainer = document.getElementById('velocity-container');
 const recordBtn = document.getElementById('record-button');
 const recordIcon = document.getElementById('record-icon');
 const clearBtn = document.getElementById('clear-button');
-const showTraceCheckbox = document.getElementById('show-trace');
-const showVelocityCheckbox = document.getElementById('show-velocity');
+const btnTrace = document.getElementById('btn-trace');
+const btnVelocity = document.getElementById('btn-velocity'); // New Icon Button
 const showBallOnPlotCheckbox = document.getElementById('show-ball-on-plot');
-const showGridCheckbox = document.getElementById('show-grid');
+const btnTangent = document.getElementById('btn-tangent');
+const btnGrid = document.getElementById('btn-grid');
 const fullscreenBtn = document.getElementById('fullscreen-button');
 const fullscreenIcon = document.getElementById('fullscreen-icon');
 const rotateHint = document.getElementById('rotate-hint');
@@ -21,9 +22,8 @@ const dismissRotateHintBtn = document.getElementById('dismiss-rotate-hint');
 const deleteRecBtn = document.getElementById('delete-recording-button'); // New
 const smoothingSlider = document.getElementById('smoothing-slider'); // New
 const smoothingValue = document.getElementById('smoothing-value'); // New
-const leftHandedCheckbox = document.getElementById('left-handed'); // Left-handed toggle
+const leftHandedToggle = document.getElementById('left-handed-toggle'); // New Toggle
 const trackControls = document.getElementById('track-controls');
-const trackControlsInner = document.getElementById('track-controls-inner');
 let rawRecordings = []; // New
 let recordingSmoothingValues = []; // Store smoothing value for each recording
 
@@ -44,7 +44,7 @@ function togglePlaybackUI(show) {
         playbackTimeLabel.innerText = '0.0s';
         
         // Ensure velocity plot resizes correctly if shown
-        if (showVelocityCheckbox.checked) resize();
+        if (settings.showVelocity) resize();
     } else {
         playbackOverlay.classList.add('hidden');
         isPlaying = false;
@@ -84,14 +84,29 @@ const COL_GRID_TEXT = '#888';
 // LocalStorage - save/load options
 const STORAGE_KEY = 'motus_options';
 
+// Settings state
+const settings = {
+    showTrace: false,
+    showBallOnPlot: false,
+    showTangents: false, // New setting
+    showGrid: true,
+    leftHanded: false
+};
+
+function updateButtonState(btn, active) {
+    if (active) btn.classList.add('active');
+    else btn.classList.remove('active');
+}
+
 function saveOptions() {
     const options = {
-        showTrace: showTraceCheckbox.checked,
+        showTrace: settings.showTrace,
         showBallOnPlot: showBallOnPlotCheckbox.checked,
-        showVelocity: showVelocityCheckbox.checked,
-        showGrid: showGridCheckbox.checked,
+        showVelocity: settings.showVelocity,
+        showTangents: settings.showTangents,
+        showGrid: settings.showGrid,
         smoothing: parseInt(smoothingSlider.value, 10),
-        leftHanded: leftHandedCheckbox.checked
+        leftHanded: leftHandedToggle.checked
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(options));
 }
@@ -101,22 +116,29 @@ function loadOptions() {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
             const options = JSON.parse(stored);
-            if (typeof options.showTrace === 'boolean') showTraceCheckbox.checked = options.showTrace;
+            if (typeof options.showTrace === 'boolean') settings.showTrace = options.showTrace;
             if (typeof options.showBallOnPlot === 'boolean') showBallOnPlotCheckbox.checked = options.showBallOnPlot;
             if (typeof options.showVelocity === 'boolean') {
-                showVelocityCheckbox.checked = options.showVelocity;
+                settings.showVelocity = options.showVelocity;
                 velocityContainer.style.display = options.showVelocity ? 'block' : 'none';
             }
-            if (typeof options.showGrid === 'boolean') showGridCheckbox.checked = options.showGrid;
+            if (typeof options.showTangents === 'boolean') settings.showTangents = options.showTangents;
+            if (typeof options.showGrid === 'boolean') settings.showGrid = options.showGrid;
             if (typeof options.smoothing === 'number') {
                 smoothingSlider.value = options.smoothing;
                 smoothingValue.innerText = options.smoothing;
             }
             if (typeof options.leftHanded === 'boolean') {
-                leftHandedCheckbox.checked = options.leftHanded;
+                leftHandedToggle.checked = options.leftHanded;
                 applyLeftHandedMode(options.leftHanded);
             }
         }
+        
+        // Update UI
+        updateButtonState(btnTrace, settings.showTrace);
+        updateButtonState(btnTangent, settings.showTangents);
+        updateButtonState(btnGrid, settings.showGrid);
+        updateButtonState(btnVelocity, settings.showVelocity);
     } catch (e) {
         console.warn('Failed to load options from localStorage:', e);
     }
@@ -130,8 +152,46 @@ function applyLeftHandedMode(enabled) {
     }
 }
 
-leftHandedCheckbox.addEventListener('change', () => {
-    applyLeftHandedMode(leftHandedCheckbox.checked);
+// Event Listeners for Icon Buttons
+btnGrid.addEventListener('click', () => {
+    settings.showGrid = !settings.showGrid;
+    updateButtonState(btnGrid, settings.showGrid);
+    saveOptions();
+    resize(); // Redraw
+});
+
+btnTrace.addEventListener('click', () => {
+    settings.showTrace = !settings.showTrace;
+    updateButtonState(btnTrace, settings.showTrace);
+    saveOptions();
+});
+
+btnTangent.addEventListener('click', () => {
+    settings.showTangents = !settings.showTangents;
+    updateButtonState(btnTangent, settings.showTangents);
+    saveOptions();
+    // Redraw required if hovering
+    if (isHoveringPlot && hoverTime !== null) requestAnimationFrame(drawPlot);
+});
+
+showBallOnPlotCheckbox.addEventListener('change', saveOptions);
+
+btnVelocity.addEventListener('click', () => {
+    settings.showVelocity = !settings.showVelocity;
+    updateButtonState(btnVelocity, settings.showVelocity);
+    
+    // Toggle container
+    velocityContainer.style.display = settings.showVelocity ? 'block' : 'none';
+    
+    // Force reflow and resize
+    void velocityContainer.offsetHeight;
+    requestAnimationFrame(resize);
+    
+    saveOptions();
+});
+
+leftHandedToggle.addEventListener('change', () => {
+    applyLeftHandedMode(leftHandedToggle.checked);
     saveOptions();
 });
 
@@ -192,7 +252,7 @@ function resize() {
     plotCtx.scale(dpr, dpr);
     
     // Velocity - only resize if visible
-    if (showVelocityCheckbox.checked && velocityContainer.style.display !== 'none') {
+    if (settings.showVelocity && velocityContainer.style.display !== 'none') {
         const rectV = velocityCanvas.parentElement.getBoundingClientRect();
         velocityCanvas.width = rectV.width * dpr;
         velocityCanvas.height = rectV.height * dpr;
@@ -232,47 +292,13 @@ function handleOrientationLayout() {
     }
 }
 
-showVelocityCheckbox.addEventListener('change', () => {
-    // First update the display property
-    if (showVelocityCheckbox.checked) {
-        velocityContainer.style.display = 'block';
-    } else {
-        velocityContainer.style.display = 'none';
-    }
-    
-    // Force reflow by reading a layout property
-    void velocityContainer.offsetHeight;
-    
-    // Wait for next frame before resizing canvases
-    requestAnimationFrame(() => {
-        resize();
-    });
-    
-    saveOptions();
-});
+
 
 // Save options when other controls change
-showTraceCheckbox.addEventListener('change', saveOptions);
-showBallOnPlotCheckbox.addEventListener('change', saveOptions);
-showGridCheckbox.addEventListener('change', saveOptions);
+// Save options when other controls change
 smoothingSlider.addEventListener('change', saveOptions); // Save on release, not every input
 
-// ... (Listeners)
 
-// ... (Loop)
-function loop() {
-    const now = Date.now();
-    const dt = (now - lastFrameTime) / 1000;
-    lastFrameTime = now;
-    
-    update(dt);
-    drawSpace();
-    drawPlot();
-    if (showVelocityCheckbox.checked) drawVelocity();
-    requestAnimationFrame(loop);
-}
-
-// ... (Update, DrawSpace, DrawPlot)
 
 function drawVelocity() {
     const w = velocityCanvas.width / window.devicePixelRatio;
@@ -345,7 +371,7 @@ function drawVelocity() {
         velocityCtx.strokeStyle = COL_GRID;
         velocityCtx.lineWidth = 1;
 
-        if (showGridCheckbox.checked) {
+        if (settings.showGrid) {
              velocityCtx.moveTo(xx, padT);
              velocityCtx.lineTo(xx, h - padB);
         } else {
@@ -546,8 +572,8 @@ function valToSpace(val) {
     const w = spaceCanvas.width / window.devicePixelRatio;
     const h = spaceCanvas.height / window.devicePixelRatio;
     // Dynamic padding - smaller for compact canvases
-    const paddingH = Math.min(60, h * 0.15);
-    const paddingW = Math.min(60, w * 0.1);
+    const paddingH = Math.min(30, h * 0.15);
+    const paddingW = Math.min(30, w * 0.1);
 
     if (isVertical) {
         const effectiveH = h - 2 * paddingH;
@@ -717,7 +743,7 @@ smoothingSlider.addEventListener('input', () => {
         requestAnimationFrame(() => {
             drawSpace();
             drawPlot();
-            if (showVelocityCheckbox.checked) drawVelocity();
+            if (settings.showVelocity) drawVelocity();
         });
     }
 });
@@ -735,7 +761,7 @@ deleteRecBtn.addEventListener('click', () => {
         requestAnimationFrame(() => {
             drawSpace();
             drawPlot();
-            if (showVelocityCheckbox.checked) drawVelocity();
+            if (settings.showVelocity) drawVelocity();
         });
     }
 });
@@ -941,7 +967,7 @@ function loop() {
     update(dt);
     drawSpace();
     drawPlot();
-    if (showVelocityCheckbox.checked) drawVelocity();
+    if (settings.showVelocity) drawVelocity();
     requestAnimationFrame(loop);
 }
 
@@ -974,8 +1000,8 @@ function drawSpace() {
     spaceCtx.clearRect(0, 0, w, h);
     
     // Dynamic padding - smaller for compact canvases
-    const paddingH = Math.min(60, h * 0.15);
-    const paddingW = Math.min(60, w * 0.1);
+    const paddingH = Math.min(30, h * 0.15);
+    const paddingW = Math.min(30, w * 0.1);
     
     spaceCtx.strokeStyle = COL_AXIS;
     spaceCtx.lineWidth = 2;
@@ -1003,7 +1029,7 @@ function drawSpace() {
     const mainNotches = [-1, -0.5, 0, 0.5, 1];
     
     // Extra notches if grid shown
-    const allNotches = showGridCheckbox.checked ? 
+    const allNotches = settings.showGrid ? 
         // Generates -1, -0.9, ... 1.0 (step 0.1)
         Array.from({length: 21}, (_, i) => -1 + i * 0.1) 
         : mainNotches;
@@ -1048,8 +1074,8 @@ function drawSpace() {
         spaceCtx.stroke();
     });
     
-    // Trace
-    if (showTraceCheckbox.checked && selectedRecIndex !== -1) {
+    // Trace (Previous Recordings)
+    if (settings.showTrace && selectedRecIndex !== -1) {
         const rec = recordings[selectedRecIndex];
         const maxT = rec[rec.length-1].t;
         
@@ -1065,6 +1091,43 @@ function drawSpace() {
                 spaceCtx.fill();
             }
         }
+    }
+
+    // Real-time Trace (Current Recording)
+    if (settings.showTrace && isRecording && currentRec.length > 0) {
+        const maxT = currentRec[currentRec.length-1].t;
+        
+        // Sample points at regular intervals for consistent look
+        // We can just iterate through currentRec since it's discrete points, 
+        // but sampling by time is cleaner if frame rate varies.
+        // For performance/simplicity in real-time, just iterating works well enough 
+        // if we skip points closer than TRACE_INTERVAL_MS.
+        
+        let lastTraceTime = -1;
+        
+        currentRec.forEach(pt => {
+             if (pt.t - lastTraceTime >= TRACE_INTERVAL_MS/1000) {
+                const pos = valToSpace(pt.x);
+                // Use a simpler fixed style for real-time or fade based on time relative to now?
+                // Fading relative to now (newest = dark) matches the playback style
+                
+                const age = maxT - pt.t; // 0 = newest
+                // Let's fade out over 5 seconds or just show all like playback? 
+                // Playback shows full path. Let's show full path.
+                
+                // Construct progress for coloring
+                // In playback: lightness = 75 - (progress * 75) => starts light, ends dark (newest)
+                const progress = pt.t / Math.max(0.1, maxT);
+                const lightness = 75 - (progress * 75);
+                
+                spaceCtx.fillStyle = `hsl(210, 10%, ${lightness}%)`; 
+                spaceCtx.beginPath();
+                spaceCtx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
+                spaceCtx.fill();
+                
+                lastTraceTime = pt.t;
+             }
+        });
     }
     
     // Ball
@@ -1106,7 +1169,7 @@ function drawPlot() {
     // Y Axis Notches (Position)
     // Toggled extra notches
     const mainY = [-1, -0.5, 0, 0.5, 1];
-    const ticksY = showGridCheckbox.checked ? 
+    const ticksY = settings.showGrid ? 
         Array.from({length: 9}, (_, i) => -1 + i * 0.25) // Every 0.25
         : mainY;
 
@@ -1149,7 +1212,7 @@ function drawPlot() {
         // Let's do ticks on bottom axis primarily, maybe full grid line if grid toggled?
         // Let's do full grid lines for time if grid is on, otherwise ticks.
         
-        if (showGridCheckbox.checked) {
+        if (settings.showGrid) {
              plotCtx.moveTo(xx, padT);
              plotCtx.lineTo(xx, h - padB);
         } else {
@@ -1264,8 +1327,8 @@ function drawPlot() {
                     }
                 }
                 
-                // Draw tangent line if hovering this plot
-                if (isHoveringPlot && velocity !== null) {
+                // Draw tangent line if hovering this plot AND enabled
+                if (settings.showTangents && isHoveringPlot && velocity !== null) {
                     const tangentLen = 50; // length in pixels on each side
                     // Slope in screen coordinates: dY/dX = (velocity * plotH / 2) / (plotW / maxTime)
                     const screenSlope = -(velocity * (plotH / 2)) / (plotW / maxTime);
@@ -1281,9 +1344,12 @@ function drawPlot() {
                 
                 // Draw coordinate label with slope (full info when in range)
                 if (isHoveringPlot) {
-                    const labelText = velocity !== null 
-                        ? `t: ${hoverTime.toFixed(2)}s, x: ${posValue.toFixed(2)}, v: ${velocity.toFixed(2)}`
-                        : `t: ${hoverTime.toFixed(2)}s, x: ${posValue.toFixed(2)}`;
+                    let labelText;
+                    if (settings.showTangents && velocity !== null) {
+                        labelText = `t: ${hoverTime.toFixed(2)}s, x: ${posValue.toFixed(2)}, v: ${velocity.toFixed(2)}`;
+                    } else {
+                        labelText = `t: ${hoverTime.toFixed(2)}s, x: ${posValue.toFixed(2)}`;
+                    }
                     
                     plotCtx.font = '11px Space Mono';
                     const textWidth = plotCtx.measureText(labelText).width;
