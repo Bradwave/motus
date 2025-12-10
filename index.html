@@ -28,10 +28,10 @@
         <!-- Plot Area -->
         <div class="section-plot">
             <div id="plots-container" style="width: 100%; height: 100%; display: flex; flex-direction: column;">
-                <div style="flex: 1; position: relative;">
+                <div id="plot-container" style="flex: 1; position: relative; min-height: 0; overflow: hidden;">
                     <canvas id="plot-canvas" style="width: 100%; height: 100%;"></canvas>
                 </div>
-                <div id="velocity-container" style="flex: 1; position: relative; border-top: 1px solid var(--color-border); display: none;">
+                <div id="velocity-container" style="flex: 1; position: relative; min-height: 0; overflow: hidden; border-top: 1px solid var(--color-border); display: none;">
                     <canvas id="velocity-canvas" style="width: 100%; height: 100%;"></canvas>
                 </div>
             </div>
@@ -75,6 +75,14 @@
                 </div>
 
                 <div class="control-group">
+                    <span>SHOW BALL ON PLOT</span>
+                    <label class="switch">
+                        <input type="checkbox" id="show-ball-on-plot">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+
+                <div class="control-group">
                     <span>SHOW VELOCITY</span>
                     <label class="switch">
                         <input type="checkbox" id="show-velocity">
@@ -100,7 +108,7 @@
 
                 <div class="control-group centered-buttons">
                     <button id="clear-button" class="action-button">
-                        <span class="material-icons">delete</span>
+                        <!--span class="material-icons">cleaning_services</span-->
                         <span>CLEAR</span>
                     </button>
                     <div id="desktop-record-placeholder"></div> 

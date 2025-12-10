@@ -181,7 +181,8 @@ html, body {
     position: absolute;
     /* Move to right */
     top: 20px;
-    right: 20px; 
+    right: 20px;
+    margin: 10px;
     background: rgba(255, 255, 255, 0.9);
     padding: 6px 14px;
     border-radius: var(--radius-full);

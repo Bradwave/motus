@@ -11,7 +11,8 @@ const recordBtn = document.getElementById('record-button');
 const recordIcon = document.getElementById('record-icon');
 const clearBtn = document.getElementById('clear-button');
 const showTraceCheckbox = document.getElementById('show-trace');
-const showVelocityCheckbox = document.getElementById('show-velocity'); // New
+const showVelocityCheckbox = document.getElementById('show-velocity');
+const showBallOnPlotCheckbox = document.getElementById('show-ball-on-plot');
 const showGridCheckbox = document.getElementById('show-grid');
 const fullscreenBtn = document.getElementById('fullscreen-button');
 const fullscreenIcon = document.getElementById('fullscreen-icon');
@@ -21,6 +22,7 @@ const deleteRecBtn = document.getElementById('delete-recording-button'); // New
 const smoothingSlider = document.getElementById('smoothing-slider'); // New
 const smoothingValue = document.getElementById('smoothing-value'); // New
 let rawRecordings = []; // New
+let recordingSmoothingValues = []; // Store smoothing value for each recording
 
 
 // Playback UI
@@ -76,6 +78,45 @@ const COL_AXIS = '#333333';
 const COL_GRID = '#e0e0e0';
 const COL_GRID_TEXT = '#888';
 
+// LocalStorage - save/load options
+const STORAGE_KEY = 'motus_options';
+
+function saveOptions() {
+    const options = {
+        showTrace: showTraceCheckbox.checked,
+        showBallOnPlot: showBallOnPlotCheckbox.checked,
+        showVelocity: showVelocityCheckbox.checked,
+        showGrid: showGridCheckbox.checked,
+        smoothing: parseInt(smoothingSlider.value, 10)
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(options));
+}
+
+function loadOptions() {
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+            const options = JSON.parse(stored);
+            if (typeof options.showTrace === 'boolean') showTraceCheckbox.checked = options.showTrace;
+            if (typeof options.showBallOnPlot === 'boolean') showBallOnPlotCheckbox.checked = options.showBallOnPlot;
+            if (typeof options.showVelocity === 'boolean') {
+                showVelocityCheckbox.checked = options.showVelocity;
+                velocityContainer.style.display = options.showVelocity ? 'block' : 'none';
+            }
+            if (typeof options.showGrid === 'boolean') showGridCheckbox.checked = options.showGrid;
+            if (typeof options.smoothing === 'number') {
+                smoothingSlider.value = options.smoothing;
+                smoothingValue.innerText = options.smoothing;
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to load options from localStorage:', e);
+    }
+}
+
+// Load options on startup
+loadOptions();
+
 // State
 let ballPos = 0.0; 
 let draggingPtrId = null; 
@@ -92,6 +133,11 @@ let lastFrameTime = 0;
 
 // Layout
 let isVertical = false;
+
+// Hover State for plots - shared time for syncing between plots
+let hoverTime = null; // Hovered time value (null = not hovering)
+let isHoveringPlot = false; // True if hovering over position plot
+let isHoveringVelocity = false; // True if hovering over velocity plot
 
 // Resize Observer
 const resizeObserver = new ResizeObserver(() => {
@@ -121,22 +167,40 @@ function resize() {
     plotCtx.resetTransform();
     plotCtx.scale(dpr, dpr);
     
-    // Velocity
-    if (showVelocityCheckbox.checked) {
-        velocityContainer.style.display = 'block';
+    // Velocity - only resize if visible
+    if (showVelocityCheckbox.checked && velocityContainer.style.display !== 'none') {
         const rectV = velocityCanvas.parentElement.getBoundingClientRect();
         velocityCanvas.width = rectV.width * dpr;
         velocityCanvas.height = rectV.height * dpr;
         velocityCtx.resetTransform();
         velocityCtx.scale(dpr, dpr);
-    } else {
-        velocityContainer.style.display = 'none';
     }
 }
 
 showVelocityCheckbox.addEventListener('change', () => {
-    resize();
+    // First update the display property
+    if (showVelocityCheckbox.checked) {
+        velocityContainer.style.display = 'block';
+    } else {
+        velocityContainer.style.display = 'none';
+    }
+    
+    // Force reflow by reading a layout property
+    void velocityContainer.offsetHeight;
+    
+    // Wait for next frame before resizing canvases
+    requestAnimationFrame(() => {
+        resize();
+    });
+    
+    saveOptions();
 });
+
+// Save options when other controls change
+showTraceCheckbox.addEventListener('change', saveOptions);
+showBallOnPlotCheckbox.addEventListener('change', saveOptions);
+showGridCheckbox.addEventListener('change', saveOptions);
+smoothingSlider.addEventListener('change', saveOptions); // Save on release, not every input
 
 // ... (Listeners)
 
@@ -175,10 +239,12 @@ function drawVelocity() {
         if (rec.length > 0 && rec[rec.length-1].t > maxTime)
             maxTime = rec[rec.length-1].t;
         
-        // Find max velocity roughly to scale Y axis?
-        // Let's iterate points
-        for(let i=1; i<rec.length; i++) {
-            const v = (rec[i].x - rec[i-1].x) / (rec[i].t - rec[i-1].t || 0.001);
+        // Find max velocity using central difference with interval of 5
+        const velInterval = 5;
+        for(let i = velInterval; i < rec.length - velInterval; i++) {
+            const dx = rec[i + velInterval].x - rec[i - velInterval].x;
+            const dt = rec[i + velInterval].t - rec[i - velInterval].t;
+            const v = dt > 0 ? dx / dt : 0;
             if (Math.abs(v) > maxV) maxV = Math.abs(v);
         }
     });
@@ -250,15 +316,24 @@ function drawVelocity() {
         velocityCtx.lineWidth = lw;
         velocityCtx.beginPath();
         
-        // We'll compute v at each point i as (x[i] - x[i-1]) / dt
-        // For i=0, v=0 or forward diff
+        // Use central difference with wider interval for smoother velocity
+        // Interval = 5 points on each side (or as many as available)
+        const velInterval = 5;
+        
+        const getVelocity = (i) => {
+            // Central difference: use points before and after
+            const halfInterval = Math.min(velInterval, i, rec.length - 1 - i);
+            if (halfInterval < 1) return 0;
+            
+            const iPrev = i - halfInterval;
+            const iNext = i + halfInterval;
+            const dx = rec[iNext].x - rec[iPrev].x;
+            const dt = rec[iNext].t - rec[iPrev].t;
+            return dt > 0 ? dx / dt : 0;
+        };
         
         const getPt = (i) => {
-            const v = (rec[i].x - rec[i-1].x) / (rec[i].t - rec[i-1].t);
-            // Map v to Y:  range [-maxV, maxV] -> [h - padB, padT]
-            // norm = (v - (-maxV)) / (2*maxV) = (v + maxV) / (2*maxV)
-            // y = (h - padB) - norm * plotH
-            
+            const v = getVelocity(i);
             const norm = (v + maxV) / (2 * maxV);
             return {
                 x: padL + (rec[i].t / maxTime) * plotW,
@@ -266,12 +341,13 @@ function drawVelocity() {
             };
         };
         
-        // Start from i=1 for backward diff
-        const start = getPt(1);
+        // Start from first valid point
+        if (rec.length <= velInterval * 2) return; // Not enough points
+        const start = getPt(velInterval);
         if(!start) return; // safety
         
         velocityCtx.moveTo(start.x, start.y);
-        for(let i=2; i<rec.length; i++) {
+        for(let i = velInterval + 1; i < rec.length - velInterval; i++) {
             const pt = getPt(i);
             velocityCtx.lineTo(pt.x, pt.y);
         }
@@ -290,6 +366,90 @@ function drawVelocity() {
             velocityCtx.lineTo(xT, h - padB);
             velocityCtx.stroke();
             velocityCtx.setLineDash([]);
+        }
+    }
+    
+    // Hover line and coordinates (synced with position plot)
+    if (hoverTime !== null && hoverTime >= 0 && hoverTime <= maxTime) {
+        const hoverX = padL + (hoverTime / maxTime) * plotW;
+        
+        // Draw dashed vertical line
+        velocityCtx.strokeStyle = '#666';
+        velocityCtx.lineWidth = 1;
+        velocityCtx.setLineDash([4, 4]);
+        velocityCtx.beginPath();
+        velocityCtx.moveTo(hoverX, padT);
+        velocityCtx.lineTo(hoverX, h - padB);
+        velocityCtx.stroke();
+        velocityCtx.setLineDash([]);
+        
+        // Snap to selected recording and show highlighted point
+        if (selectedRecIndex !== -1 && recordings[selectedRecIndex]) {
+            const rec = recordings[selectedRecIndex];
+            const velInterval = 5;
+            
+            // Find velocity at hover time
+            let velValue = null;
+            for (let i = velInterval; i < rec.length - velInterval; i++) {
+                if (rec[i].t >= hoverTime) {
+                    const halfInt = Math.min(velInterval, i, rec.length - 1 - i);
+                    if (halfInt >= 1) {
+                        const dx = rec[i + halfInt].x - rec[i - halfInt].x;
+                        const dt = rec[i + halfInt].t - rec[i - halfInt].t;
+                        velValue = dt > 0 ? dx / dt : 0;
+                    }
+                    break;
+                }
+            }
+            
+            if (velValue !== null) {
+                // Calculate Y position on the velocity graph
+                const norm = (velValue + maxV) / (2 * maxV);
+                const velY = (h - padB) - norm * plotH;
+                
+                // Draw highlighted point on the velocity curve
+                velocityCtx.beginPath();
+                velocityCtx.arc(hoverX, velY, 6, 0, Math.PI * 2);
+                velocityCtx.fillStyle = COL_ACCENT;
+                velocityCtx.fill();
+                velocityCtx.strokeStyle = '#fff';
+                velocityCtx.lineWidth = 2;
+                velocityCtx.stroke();
+                
+                // Draw coordinate label if hovering this plot
+                if (isHoveringVelocity) {
+                    const labelText = `t: ${hoverTime.toFixed(2)}s, v: ${velValue.toFixed(2)}`;
+                    
+                    velocityCtx.font = '11px Space Mono';
+                    const textWidth = velocityCtx.measureText(labelText).width;
+                    const labelX = Math.min(hoverX + 15, w - padR - textWidth - 5);
+                    const labelY = Math.max(velY - 15, padT + 15);
+                    
+                    velocityCtx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+                    velocityCtx.fillRect(labelX - 4, labelY - 11, textWidth + 8, 16);
+                    
+                    velocityCtx.fillStyle = '#333';
+                    velocityCtx.textAlign = 'left';
+                    velocityCtx.textBaseline = 'middle';
+                    velocityCtx.fillText(labelText, labelX, labelY);
+                }
+            }
+        } else if (isHoveringVelocity) {
+            // No recording selected, just show time
+            const labelText = `t: ${hoverTime.toFixed(2)}s`;
+            
+            velocityCtx.font = '11px Space Mono';
+            const textWidth = velocityCtx.measureText(labelText).width;
+            const labelX = Math.min(hoverX + 8, w - padR - textWidth - 5);
+            const labelY = padT + 15;
+            
+            velocityCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            velocityCtx.fillRect(labelX - 3, labelY - 11, textWidth + 6, 14);
+            
+            velocityCtx.fillStyle = '#333';
+            velocityCtx.textAlign = 'left';
+            velocityCtx.textBaseline = 'middle';
+            velocityCtx.fillText(labelText, labelX, labelY);
         }
     }
 }
@@ -395,8 +555,9 @@ function stopRecording() {
         // Save to raw
         rawRecordings.push(currentRec);
         
-        // Apply current smoothing
+        // Apply current smoothing and save the value
         const smVal = parseInt(smoothingSlider.value, 10);
+        recordingSmoothingValues.push(smVal);
         const smoothed = smoothRecording(currentRec, smVal);
         recordings.push(smoothed);
         
@@ -443,6 +604,7 @@ smoothingSlider.addEventListener('input', () => {
     
     // Only update the currently selected recording
     if (selectedRecIndex !== -1 && rawRecordings[selectedRecIndex]) {
+        recordingSmoothingValues[selectedRecIndex] = val; // Save new value
         const smoothed = smoothRecording(rawRecordings[selectedRecIndex], val);
         recordings[selectedRecIndex] = smoothed;
         
@@ -459,6 +621,7 @@ deleteRecBtn.addEventListener('click', () => {
     if (selectedRecIndex !== -1) {
         recordings.splice(selectedRecIndex, 1);
         rawRecordings.splice(selectedRecIndex, 1);
+        recordingSmoothingValues.splice(selectedRecIndex, 1);
         
         selectedRecIndex = -1;
         togglePlaybackUI(false);
@@ -484,6 +647,105 @@ document.addEventListener('keydown', (e) => {
 });
 document.addEventListener('keyup', (e) => {
     if (e.key === 'r' || e.key === 'R') stopRecording();
+});
+
+// Plot Hover Events - calculate shared time for syncing
+// Helper function to handle hover on plot canvas
+function handlePlotHover(clientX) {
+    const rect = plotCanvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const w = plotCanvas.width / window.devicePixelRatio;
+    const padL = 40, padR = 20;
+    const plotW = w - padL - padR;
+    
+    // Calculate max time from recordings
+    let maxTime = 5;
+    recordings.forEach(rec => {
+        if (rec.length > 0 && rec[rec.length-1].t > maxTime) maxTime = rec[rec.length-1].t;
+    });
+    
+    if (x >= padL && x <= w - padR) {
+        hoverTime = ((x - padL) / plotW) * maxTime;
+    } else {
+        hoverTime = null;
+    }
+    isHoveringPlot = true;
+    isHoveringVelocity = false;
+}
+
+// Helper function to handle hover on velocity canvas
+function handleVelocityHover(clientX) {
+    const rect = velocityCanvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const w = velocityCanvas.width / window.devicePixelRatio;
+    const padL = 40, padR = 20;
+    const plotW = w - padL - padR;
+    
+    // Calculate max time from recordings
+    let maxTime = 5;
+    recordings.forEach(rec => {
+        if (rec.length > 0 && rec[rec.length-1].t > maxTime) maxTime = rec[rec.length-1].t;
+    });
+    
+    if (x >= padL && x <= w - padR) {
+        hoverTime = ((x - padL) / plotW) * maxTime;
+    } else {
+        hoverTime = null;
+    }
+    isHoveringPlot = false;
+    isHoveringVelocity = true;
+}
+
+// Mouse events - plot canvas
+plotCanvas.addEventListener('mousemove', (e) => handlePlotHover(e.clientX));
+plotCanvas.addEventListener('mouseleave', () => {
+    hoverTime = null;
+    isHoveringPlot = false;
+});
+
+// Touch events - plot canvas
+plotCanvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) {
+        handlePlotHover(e.touches[0].clientX);
+    }
+}, { passive: true });
+plotCanvas.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 1) {
+        handlePlotHover(e.touches[0].clientX);
+    }
+}, { passive: true });
+plotCanvas.addEventListener('touchend', () => {
+    // Keep showing the last position for a moment on touch end
+    setTimeout(() => {
+        hoverTime = null;
+        isHoveringPlot = false;
+    }, 1500);
+});
+
+// Mouse events - velocity canvas
+velocityCanvas.addEventListener('mousemove', (e) => handleVelocityHover(e.clientX));
+velocityCanvas.addEventListener('mouseleave', () => {
+    hoverTime = null;
+    isHoveringVelocity = false;
+});
+
+// Touch events - velocity canvas
+velocityCanvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) {
+        handleVelocityHover(e.touches[0].clientX);
+    }
+}, { passive: true });
+velocityCanvas.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 1) {
+        handleVelocityHover(e.touches[0].clientX);
+    }
+}, { passive: true });
+velocityCanvas.addEventListener('touchend', () => {
+    // Keep showing the last position for a moment on touch end
+    setTimeout(() => {
+        hoverTime = null;
+        isHoveringVelocity = false;
+    }, 1500);
 });
 
 
@@ -531,6 +793,12 @@ plotCanvas.addEventListener('click', (e) => {
     
     if (closestIdx !== -1) {
         selectedRecIndex = closestIdx;
+        
+        // Update smoothing slider to show this recording's value
+        const recSmoothing = recordingSmoothingValues[closestIdx] || 0;
+        smoothingSlider.value = recSmoothing;
+        smoothingValue.innerText = recSmoothing;
+        
         togglePlaybackUI(true);
     } else {
         selectedRecIndex = -1;
@@ -567,6 +835,7 @@ function loop() {
     update(dt);
     drawSpace();
     drawPlot();
+    if (showVelocityCheckbox.checked) drawVelocity();
     requestAnimationFrame(loop);
 }
 
@@ -831,6 +1100,132 @@ function drawPlot() {
             plotCtx.stroke();
             plotCtx.setLineDash([]);
         }
+    }
+    
+    // Hover line and coordinates (synced with velocity plot)
+    if (hoverTime !== null && hoverTime >= 0 && hoverTime <= maxTime) {
+        const hoverX = padL + (hoverTime / maxTime) * plotW;
+        
+        // Draw dashed vertical line
+        plotCtx.strokeStyle = '#666';
+        plotCtx.lineWidth = 1;
+        plotCtx.setLineDash([4, 4]);
+        plotCtx.beginPath();
+        plotCtx.moveTo(hoverX, padT);
+        plotCtx.lineTo(hoverX, h - padB);
+        plotCtx.stroke();
+        plotCtx.setLineDash([]);
+        
+        // Snap to selected recording and show enhanced info
+        if (selectedRecIndex !== -1 && recordings[selectedRecIndex]) {
+            const rec = recordings[selectedRecIndex];
+            const posValue = interpolateX(rec, hoverTime);
+            
+            if (posValue !== null) {
+                // Calculate Y position on the graph
+                const posY = (h - padB) - ((posValue + 1) / 2) * plotH;
+                
+                // Draw highlighted point on the curve
+                plotCtx.beginPath();
+                plotCtx.arc(hoverX, posY, 6, 0, Math.PI * 2);
+                plotCtx.fillStyle = COL_ACCENT;
+                plotCtx.fill();
+                plotCtx.strokeStyle = '#fff';
+                plotCtx.lineWidth = 2;
+                plotCtx.stroke();
+                
+                // Calculate velocity/slope using central difference
+                const velInterval = 5;
+                let velocity = null;
+                for (let i = velInterval; i < rec.length - velInterval; i++) {
+                    if (rec[i].t >= hoverTime) {
+                        const halfInt = Math.min(velInterval, i, rec.length - 1 - i);
+                        if (halfInt >= 1) {
+                            const dx = rec[i + halfInt].x - rec[i - halfInt].x;
+                            const dt = rec[i + halfInt].t - rec[i - halfInt].t;
+                            velocity = dt > 0 ? dx / dt : 0;
+                        }
+                        break;
+                    }
+                }
+                
+                // Draw tangent line if hovering this plot
+                if (isHoveringPlot && velocity !== null) {
+                    const tangentLen = 50; // length in pixels on each side
+                    // Slope in screen coordinates: dY/dX = (velocity * plotH / 2) / (plotW / maxTime)
+                    const screenSlope = -(velocity * (plotH / 2)) / (plotW / maxTime);
+                    const angle = Math.atan(screenSlope);
+                    
+                    plotCtx.beginPath();
+                    plotCtx.strokeStyle = COL_ACCENT;
+                    plotCtx.lineWidth = 2;
+                    plotCtx.moveTo(hoverX - tangentLen * Math.cos(angle), posY - tangentLen * Math.sin(angle));
+                    plotCtx.lineTo(hoverX + tangentLen * Math.cos(angle), posY + tangentLen * Math.sin(angle));
+                    plotCtx.stroke();
+                }
+                
+                // Draw coordinate label with slope
+                if (isHoveringPlot) {
+                    const labelText = velocity !== null 
+                        ? `t: ${hoverTime.toFixed(2)}s, x: ${posValue.toFixed(2)}, v: ${velocity.toFixed(2)}`
+                        : `t: ${hoverTime.toFixed(2)}s, x: ${posValue.toFixed(2)}`;
+                    
+                    plotCtx.font = '11px Space Mono';
+                    const textWidth = plotCtx.measureText(labelText).width;
+                    const labelX = Math.min(hoverX + 15, w - padR - textWidth - 5);
+                    const labelY = Math.max(posY - 15, padT + 15);
+                    
+                    // Background for readability
+                    plotCtx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+                    plotCtx.fillRect(labelX - 4, labelY - 11, textWidth + 8, 16);
+                    
+                    plotCtx.fillStyle = '#333';
+                    plotCtx.textAlign = 'left';
+                    plotCtx.textBaseline = 'middle';
+                    plotCtx.fillText(labelText, labelX, labelY);
+                }
+            }
+        } else if (isHoveringPlot) {
+            // No recording selected, just show time
+            const labelText = `t: ${hoverTime.toFixed(2)}s`;
+            
+            plotCtx.font = '11px Space Mono';
+            const textWidth = plotCtx.measureText(labelText).width;
+            const labelX = Math.min(hoverX + 8, w - padR - textWidth - 5);
+            const labelY = padT + 15;
+            
+            plotCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            plotCtx.fillRect(labelX - 3, labelY - 11, textWidth + 6, 14);
+            
+            plotCtx.fillStyle = '#333';
+            plotCtx.textAlign = 'left';
+            plotCtx.textBaseline = 'middle';
+            plotCtx.fillText(labelText, labelX, labelY);
+        }
+    }
+    
+    // Draw ball position on Y-axis if enabled
+    if (showBallOnPlotCheckbox.checked) {
+        const ballY = (h - padB) - ((ballPos + 1) / 2) * plotH;
+        
+        // Draw ball marker on Y-axis
+        plotCtx.beginPath();
+        plotCtx.arc(padL, ballY, 8, 0, Math.PI * 2);
+        plotCtx.fillStyle = COL_ACCENT;
+        plotCtx.fill();
+        plotCtx.strokeStyle = '#fff';
+        plotCtx.lineWidth = 2;
+        plotCtx.stroke();
+        
+        // Draw horizontal guide line
+        plotCtx.beginPath();
+        plotCtx.strokeStyle = 'rgba(20, 132, 230, 0.3)';
+        plotCtx.lineWidth = 1;
+        plotCtx.setLineDash([3, 3]);
+        plotCtx.moveTo(padL, ballY);
+        plotCtx.lineTo(w - padR, ballY);
+        plotCtx.stroke();
+        plotCtx.setLineDash([]);
     }
 }
 
