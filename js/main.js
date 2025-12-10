@@ -25,7 +25,7 @@ const smoothingValue = document.getElementById('smoothing-value'); // New
 const leftHandedToggle = document.getElementById('left-handed-toggle'); // New Toggle
 const trackControls = document.getElementById('track-controls');
 let rawRecordings = []; // New
-let recordingSmoothingValues = []; // Store smoothing value for each recording
+
 
 
 // Playback UI
@@ -397,39 +397,20 @@ function drawVelocity() {
         velocityCtx.lineWidth = lw;
         velocityCtx.beginPath();
         
+        
         // Use central difference with wider interval for smoother velocity
         // Interval = 5 points on each side (or as many as available)
         const velInterval = 5;
-        
-        const getVelocity = (i) => {
-            // Central difference: use points before and after
-            const halfInterval = Math.min(velInterval, i, rec.length - 1 - i);
-            if (halfInterval < 1) return 0;
-            
-            const iPrev = i - halfInterval;
-            const iNext = i + halfInterval;
-            const dx = rec[iNext].x - rec[iPrev].x;
-            const dt = rec[iNext].t - rec[iPrev].t;
-            return dt > 0 ? dx / dt : 0;
-        };
-        
-        const getPt = (i) => {
-            const v = getVelocity(i);
-            const norm = (v + maxV) / (2 * maxV);
-            return {
-                x: padL + (rec[i].t / maxTime) * plotW,
-                y: (h - padB) - norm * plotH
-            };
-        };
-        
+
         // Start from first valid point
         if (rec.length <= velInterval * 2) return; // Not enough points
-        const start = getPt(velInterval);
+        
+        const start = getPt(rec, velInterval, velInterval, maxV, maxTime, plotW, plotH, h, padL, padB);
         if(!start) return; // safety
         
         velocityCtx.moveTo(start.x, start.y);
         for(let i = velInterval + 1; i < rec.length - velInterval; i++) {
-            const pt = getPt(i);
+            const pt = getPt(rec, i, velInterval, maxV, maxTime, plotW, plotH, h, padL, padB);
             velocityCtx.lineTo(pt.x, pt.y);
         }
         velocityCtx.stroke();
@@ -610,6 +591,30 @@ function spaceToVal(x, y) {
     }
 }
 
+// Helper Functions for Velocity Calculation
+function calculateVelocity(rec, i, halfInterval) {
+    if (halfInterval < 1) return 0;
+    
+    // Boundary checks
+    if (i - halfInterval < 0 || i + halfInterval >= rec.length) return 0;
+
+    const iPrev = i - halfInterval;
+    const iNext = i + halfInterval;
+    const dx = rec[iNext].x - rec[iPrev].x;
+    const dt = rec[iNext].t - rec[iPrev].t;
+    return dt > 0 ? dx / dt : 0;
+}
+
+function getPt(rec, i, velInterval, maxV, maxTime, plotW, plotH, h, padL, padB) {
+    const halfInterval = Math.min(velInterval, i, rec.length - 1 - i);
+    const v = calculateVelocity(rec, i, halfInterval);
+    const norm = (v + maxV) / (2 * maxV);
+    return {
+        x: padL + (rec[i].t / maxTime) * plotW,
+        y: (h - padB) - norm * plotH
+    };
+}
+
 // Interaction
 spaceCanvas.addEventListener('pointerdown', (e) => {
     if (draggingPtrId !== null || isPlaying) return; 
@@ -736,7 +741,7 @@ smoothingSlider.addEventListener('input', () => {
     
     // Only update the currently selected recording
     if (selectedRecIndex !== -1 && rawRecordings[selectedRecIndex]) {
-        recordingSmoothingValues[selectedRecIndex] = val; // Save new value
+
         const smoothed = smoothRecording(rawRecordings[selectedRecIndex], val);
         recordings[selectedRecIndex] = smoothed;
         
@@ -753,7 +758,7 @@ deleteRecBtn.addEventListener('click', () => {
     if (selectedRecIndex !== -1) {
         recordings.splice(selectedRecIndex, 1);
         rawRecordings.splice(selectedRecIndex, 1);
-        recordingSmoothingValues.splice(selectedRecIndex, 1);
+
         
         selectedRecIndex = -1;
         togglePlaybackUI(false);
