@@ -220,6 +220,32 @@ let hoverTime = null; // Hovered time value (null = not hovering)
 let isHoveringPlot = false; // True if hovering over position plot
 let isHoveringVelocity = false; // True if hovering over velocity plot
 
+// Network State
+let peer = null;
+let connections = []; // For Host: list of connected clients
+let conn = null;      // For Client: connection to host
+let isHost = false;
+let isClient = false;
+let myId = null;
+
+// Network UI Elements
+const btnSync = document.getElementById('btn-sync');
+const syncOverlay = document.getElementById('sync-overlay');
+const closeSyncBtn = document.getElementById('close-sync-btn');
+const hostIdDisplay = document.getElementById('host-id-display');
+const copyHostIdBtn = document.getElementById('copy-host-id-btn');
+const joinIdInput = document.getElementById('join-id-input');
+const joinBtn = document.getElementById('join-btn');
+const connectionStatus = document.getElementById('connection-status');
+const statusText = document.getElementById('status-text');
+const clientIndicator = document.getElementById('client-indicator');
+const disconnectBtn = document.getElementById('disconnect-btn');
+
+const messageOverlay = document.getElementById('message-overlay');
+const messageTitle = document.getElementById('message-title');
+const messageBody = document.getElementById('message-body');
+const messageCloseBtn = document.getElementById('message-close-btn');
+
 // Resize Observer
 const resizeObserver = new ResizeObserver(() => {
     resize();
@@ -591,6 +617,45 @@ function spaceToVal(x, y) {
     }
 }
 
+
+spaceCanvas.addEventListener('pointerdown', (e) => {
+    if (isClient) return; // Block input if client
+    if (draggingPtrId !== null || isPlaying) return; 
+    
+    const rect = spaceCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Check if clicked near line
+    const val = spaceToVal(x, y);
+    const canvasPos = valToSpace(val);
+    
+    // Distance check (vertical vs horizontal)
+    let dist;
+    if (isVertical) {
+        dist = Math.abs(x - canvasPos.x);
+    } else {
+        dist = Math.abs(y - canvasPos.y);
+    }
+    
+    if (dist < 30) { // Hit radius
+        draggingPtrId = e.pointerId;
+        spaceCanvas.setPointerCapture(e.pointerId);
+        ballPos = val;
+        triggerHaptic('light');
+    }
+});
+
+spaceCanvas.addEventListener('pointermove', (e) => {
+    if (isClient) return;
+    if (draggingPtrId !== null && e.pointerId === draggingPtrId) {
+        const rect = spaceCanvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        ballPos = spaceToVal(x, y);
+    }
+});
+
 // Helper Functions for Velocity Calculation
 function calculateVelocity(rec, i, halfInterval) {
     if (halfInterval < 1) return 0;
@@ -614,32 +679,6 @@ function getPt(rec, i, velInterval, maxV, maxTime, plotW, plotH, h, padL, padB) 
         y: (h - padB) - norm * plotH
     };
 }
-
-// Interaction
-spaceCanvas.addEventListener('pointerdown', (e) => {
-    if (draggingPtrId !== null || isPlaying) return; 
-    
-    const rect = spaceCanvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
-    const pos = valToSpace(ballPos);
-    const dist = Math.sqrt((x - pos.x)**2 + (y - pos.y)**2);
-    
-    // Check if dragging near ball for actual drag?
-    // Or allow tapping anywhere to teleport? Dragging implies dragging the ball.
-    if (dist < 40) { 
-        draggingPtrId = e.pointerId;
-        spaceCanvas.setPointerCapture(e.pointerId);
-    }
-});
-
-spaceCanvas.addEventListener('pointermove', (e) => {
-    if (e.pointerId === draggingPtrId) {
-        const rect = spaceCanvas.getBoundingClientRect();
-        ballPos = spaceToVal(e.clientX - rect.left, e.clientY - rect.top);
-    }
-});
 
 function endDrag(e) {
     if (e.pointerId === draggingPtrId) draggingPtrId = null;
@@ -692,9 +731,9 @@ function stopRecording() {
         // Save to raw
         rawRecordings.push(currentRec);
         
-        // Apply current smoothing and save the value
+        // Apply current smoothing
         const smVal = parseInt(smoothingSlider.value, 10);
-        recordingSmoothingValues.push(smVal);
+        // recordingSmoothingValues.push(smVal); // Removed
         const smoothed = smoothRecording(currentRec, smVal);
         recordings.push(smoothed);
         
@@ -772,6 +811,7 @@ deleteRecBtn.addEventListener('click', () => {
 });
 
 recordBtn.addEventListener('pointerdown', (e) => {
+    if (isClient) return; // Block recording if client
     startRecording();
     recordBtn.setPointerCapture(e.pointerId);
 });
@@ -932,7 +972,8 @@ plotCanvas.addEventListener('click', (e) => {
         selectedRecIndex = closestIdx;
         
         // Update smoothing slider to show this recording's value
-        const recSmoothing = recordingSmoothingValues[closestIdx] || 0;
+        // const recSmoothing = recordingSmoothingValues[closestIdx] || 0;
+        const recSmoothing = 0; // Placeholder to avoid ReferenceError
         smoothingSlider.value = recSmoothing;
         smoothingValue.innerText = recSmoothing;
         
@@ -963,6 +1004,211 @@ clearBtn.addEventListener('click', () => {
     isRecording = false;
 });
 
+// Network Logic
+function generateShortId() {
+    // Generate 5-character string (e.g., "K9X2B")
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I, 1, O, 0 to avoid confusion
+    let result = '';
+    for (let i = 0; i < 5; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+}
+
+function initPeer() {
+    if (peer) return; // Already initialized
+    
+    authPeer(generateShortId());
+}
+
+function authPeer(customId) {
+    // Try to claim a short ID
+    peer = new Peer(customId); 
+    
+    peer.on('open', (id) => {
+        myId = id;
+        hostIdDisplay.innerText = id;
+        isHost = true; 
+        statusText.innerText = 'Ready to Host';
+        // Make sure connection status is clear unless error
+        if (connectionStatus.innerText.includes('Error')) {
+             connectionStatus.classList.add('hidden');
+        }
+    });
+    
+    peer.on('connection', (c) => {
+        if (!isHost) { c.close(); return; }
+        connections.push(c);
+        setupConnection(c);
+        broadcastState();
+    });
+    
+    peer.on('error', (err) => {
+        if (err.type === 'unavailable-id') {
+            // ID conflict, try again automatically
+            console.log('ID taken, retrying...');
+            peer.destroy();
+            peer = null;
+            authPeer(generateShortId());
+        } else {
+            console.error('PeerJS Error:', err);
+            statusText.innerText = 'Error: ' + err.type;
+            connectionStatus.classList.remove('hidden');
+        }
+    });
+}
+
+function setupConnection(c) {
+    c.on('data', (data) => {
+        // handle incoming data if needed (e.g. client requests?)
+        // Currently architecture is Host -> Client one way for state.
+        if (isHost) return; 
+        
+        // Client Handling
+        if (data.type === 'sync_state') {
+            ballPos = data.x;
+            
+            // Detect recording stop (falling edge) to save data
+            if (isRecording && !data.isRec) {
+                if (currentRec.length > 0) {
+                   rawRecordings.push(currentRec);
+                    const smVal = parseInt(smoothingSlider.value, 10);
+                    const smoothed = smoothRecording(currentRec, smVal);
+                    recordings.push(smoothed);
+                }
+                currentRec = [];
+            }
+
+            isRecording = data.isRec;
+            
+            if (isRecording) {
+                 // For trace visualization on client
+                 if (currentRec.length === 0 || data.t > currentRec[currentRec.length-1].t) {
+                     currentRec.push({ t: data.t, x: data.x });
+                 }
+            } else {
+                currentRec = [];
+            }
+        }
+    });
+    
+    c.on('open', () => {
+        if (isClient) {
+            statusText.innerText = "Connected!";
+            setTimeout(() => {
+                syncOverlay.classList.add('hidden');
+                clientIndicator.classList.remove('hidden');
+                spaceCanvas.style.opacity = '0.5'; // Visual cue for disabled
+                recordBtn.style.opacity = '0.5';
+                recordBtn.style.pointerEvents = 'none';
+            }, 1000);
+        }
+    });
+    
+    c.on('close', () => {
+        // Handle disconnect
+        if (isClient) {
+            cleanupNetwork();
+            showMessage('Disconnected', 'The connection to the Host was lost.');
+        } else {
+            // Remove from connections list
+            connections = connections.filter(conn => conn !== c);
+        }
+    });
+}
+
+function connectToHost(hostId) {
+    if (!peer) initPeer();
+    
+    // Simple state switch
+    isHost = false;
+    isClient = true;
+    
+    connectionStatus.classList.remove('hidden');
+    statusText.innerText = "Connecting...";
+    
+    conn = peer.connect(hostId);
+    setupConnection(conn);
+}
+
+function broadcastState() {
+    if (!isHost || connections.length === 0) return;
+    
+    const packet = {
+        type: 'sync_state',
+        t: (Date.now() - recStartTime) / 1000, // Sync current recording time if valid
+        x: ballPos,
+        isRec: isRecording
+    };
+    
+    connections.forEach(c => {
+        if (c.open) c.send(packet);
+    });
+}
+
+function cleanupNetwork() {
+    if (peer) {
+        peer.destroy();
+        peer = null;
+    }
+    connections = [];
+    conn = null;
+    isHost = false;
+    isClient = false;
+    clientIndicator.classList.add('hidden');
+    hostIdDisplay.innerText = '...';
+    
+    // Close overlay on disconnect
+    syncOverlay.classList.add('hidden'); 
+    
+    // Reset Client UI overrides
+    spaceCanvas.style.opacity = '1';
+    recordBtn.style.opacity = '1';
+    recordBtn.style.pointerEvents = 'auto';
+}
+
+function showMessage(title, body) {
+    messageTitle.innerText = title;
+    messageBody.innerText = body;
+    messageOverlay.classList.remove('hidden');
+}
+
+messageCloseBtn.addEventListener('click', () => {
+    messageOverlay.classList.add('hidden');
+});
+
+// Network UI Event Listeners
+btnSync.addEventListener('click', () => {
+    syncOverlay.classList.remove('hidden');
+    if (!peer) initPeer();
+});
+
+closeSyncBtn.addEventListener('click', () => {
+    syncOverlay.classList.add('hidden');
+});
+
+copyHostIdBtn.addEventListener('click', () => {
+    if (myId) {
+        navigator.clipboard.writeText(myId);
+        const originalIcon = copyHostIdBtn.querySelector('span').innerText;
+        copyHostIdBtn.querySelector('span').innerText = 'check';
+        setTimeout(() => {
+            copyHostIdBtn.querySelector('span').innerText = originalIcon;
+        }, 1500);
+    }
+});
+
+joinBtn.addEventListener('click', () => {
+    const id = joinIdInput.value.trim();
+    if (id) {
+        connectToHost(id);
+    }
+});
+
+disconnectBtn.addEventListener('click', () => {
+    cleanupNetwork();
+});
+
 // Loop
 function loop() {
     const now = Date.now();
@@ -973,11 +1219,14 @@ function loop() {
     drawSpace();
     drawPlot();
     if (settings.showVelocity) drawVelocity();
+    
+    if (isHost) broadcastState();
+    
     requestAnimationFrame(loop);
 }
 
 function update(dt) {
-    if (isRecording) {
+    if (isRecording && !isClient) {
         const t = (Date.now() - recStartTime) / 1000;
         currentRec.push({ t: t, x: ballPos });
     } else if (isPlaying && selectedRecIndex !== -1) {
