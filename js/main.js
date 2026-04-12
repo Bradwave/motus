@@ -812,12 +812,14 @@ deleteRecBtn.addEventListener('click', () => {
 
 recordBtn.addEventListener('pointerdown', (e) => {
     if (isClient) return; // Block recording if client
+    e.preventDefault(); // Prevent browser defaults (e.g. context menu, scrolling)
     startRecording();
     recordBtn.setPointerCapture(e.pointerId);
 });
 recordBtn.addEventListener('pointerup', stopRecording);
 recordBtn.addEventListener('pointercancel', stopRecording); 
-recordBtn.addEventListener('pointerleave', stopRecording);
+recordBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+
 
 document.addEventListener('keydown', (e) => {
     if ((e.key === 'r' || e.key === 'R') && !e.repeat) startRecording();
