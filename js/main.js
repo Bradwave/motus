@@ -618,8 +618,11 @@ function spaceToVal(x, y) {
 }
 
 
+spaceCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
 spaceCanvas.addEventListener('pointerdown', (e) => {
     if (isClient) return; // Block input if client
+    e.preventDefault();
     if (draggingPtrId !== null || isPlaying) return; 
     
     const rect = spaceCanvas.getBoundingClientRect();
@@ -640,7 +643,9 @@ spaceCanvas.addEventListener('pointerdown', (e) => {
     
     if (dist < 30) { // Hit radius
         draggingPtrId = e.pointerId;
-        spaceCanvas.setPointerCapture(e.pointerId);
+        try {
+            spaceCanvas.setPointerCapture(e.pointerId);
+        } catch (err) {}
         ballPos = val;
         triggerHaptic('light');
     }
@@ -720,7 +725,7 @@ function startRecording() {
     togglePlaybackUI(false);
 }
 
-function stopRecording() {
+function stopRecording(e) {
     if (!isRecording) return;
     isRecording = false;
     
@@ -810,15 +815,91 @@ deleteRecBtn.addEventListener('click', () => {
     }
 });
 
+let isTouchActiveOnRecord = false;
+let recordTouchId = null;
+
+function handleRecordRelease(e) {
+    if (!isRecording) return;
+    isTouchActiveOnRecord = false;
+    recordTouchId = null;
+    stopRecording(e);
+}
+
+recordBtn.addEventListener('touchstart', (e) => {
+    isTouchActiveOnRecord = true;
+    if (e.changedTouches && e.changedTouches[0]) {
+        recordTouchId = e.changedTouches[0].identifier;
+    }
+}, { passive: true });
+
 recordBtn.addEventListener('pointerdown', (e) => {
     if (isClient) return; // Block recording if client
     e.preventDefault(); // Prevent browser defaults (e.g. context menu, scrolling)
+    if (e.pointerType === 'touch') {
+        isTouchActiveOnRecord = true;
+    }
     startRecording();
-    recordBtn.setPointerCapture(e.pointerId);
+    try {
+        recordBtn.setPointerCapture(e.pointerId);
+    } catch (err) {}
 });
-recordBtn.addEventListener('pointerup', stopRecording);
-recordBtn.addEventListener('pointercancel', stopRecording); 
+
+recordBtn.addEventListener('pointerup', (e) => {
+    // In Android / iOS, the OS long-press detector fires a synthetic pointerup/pointercancel
+    // after ~2.00s of holding still, even while the user's finger is still pressed down.
+    // If a physical touch is active on the button, ignore the synthetic pointerup.
+    if (e.pointerType === 'touch' && isTouchActiveOnRecord) {
+        return;
+    }
+    handleRecordRelease(e);
+});
+
+recordBtn.addEventListener('pointercancel', (e) => {
+    if (e.pointerType === 'touch' && isTouchActiveOnRecord) {
+        return;
+    }
+    handleRecordRelease(e);
+});
+
+window.addEventListener('touchend', (e) => {
+    if (!isRecording || !isTouchActiveOnRecord) return;
+    if (e.touches.length === 0) {
+        handleRecordRelease(e);
+        return;
+    }
+    if (recordTouchId !== null && e.changedTouches) {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === recordTouchId) {
+                handleRecordRelease(e);
+                return;
+            }
+        }
+    } else {
+        handleRecordRelease(e);
+    }
+}, { passive: true });
+
+window.addEventListener('touchcancel', (e) => {
+    if (!isRecording || !isTouchActiveOnRecord) return;
+    if (e.touches.length === 0) {
+        handleRecordRelease(e);
+        return;
+    }
+    if (recordTouchId !== null && e.changedTouches) {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === recordTouchId) {
+                handleRecordRelease(e);
+                return;
+            }
+        }
+    } else {
+        handleRecordRelease(e);
+    }
+}, { passive: true });
+
 recordBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+recordBtn.addEventListener('selectstart', (e) => e.preventDefault());
+recordBtn.addEventListener('dragstart', (e) => e.preventDefault());
 
 
 document.addEventListener('keydown', (e) => {
